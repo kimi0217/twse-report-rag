@@ -7,7 +7,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
 sys.path.insert(0, str(ROOT / "tests"))
 
-from check_pdf_text import KANGXI, check_pdf  # noqa: E402
+from check_pdf_text import KANGXI, check_pdf, is_rare_char, rare_char_ratio  # noqa: E402
 import extract_financial_tables as eft  # noqa: E402
 from extract_financial_tables import (  # noqa: E402
     _fix_detached_commas,
@@ -31,7 +31,7 @@ def pdfs(tmp_path_factory):
 
 @pytest.mark.parametrize(
     "name, verdict",
-    [("good", "OK"), ("scanned", "FAIL"), ("mojibake", "FAIL")],
+    [("good", "OK"), ("scanned", "FAIL"), ("mojibake", "FAIL"), ("remapped", "FAIL")],
 )
 def test_check_verdict(pdfs, tmp_path, name, verdict):
     assert check_pdf(pdfs[name], 20, tmp_path).verdict == verdict
@@ -209,3 +209,28 @@ def test_continued_table_and_excluded_title(pdfs):
         (2, "合併財務狀況比較分析表（續）"),
     ]
     assert stats["excluded_title"] == 1
+
+
+# --- 罕見字比例 ---
+
+
+def test_rare_char_detection():
+    assert not any(map(is_rare_char, "公司股東新台幣"))
+    assert all(map(is_rare_char, "耡噟奙䭷㼫倝"))  # 中華電年報實際出現的錯字
+
+
+def test_rare_char_ratio():
+    assert rare_char_ratio("營業收入 ABC 123") == 0.0
+    assert rare_char_ratio("耡合國") == pytest.approx(1 / 3)
+    assert rare_char_ratio("") == 0.0
+
+
+def test_remapped_pdf_fails_only_on_rare_ratio(pdfs, tmp_path):
+    rep = check_pdf(pdfs["remapped"], 20, tmp_path)
+    assert rep.garbled_ratio == 0  # 舊指標抓不到
+    assert rep.rare_ratio > 0.02
+    assert any("罕見字" in r for r in rep.reasons)
+
+
+def test_private_use_bullets_removed():
+    assert normalize_text("\uf06c 經營結果比較分析") == "經營結果比較分析"

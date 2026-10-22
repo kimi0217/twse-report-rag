@@ -16,6 +16,8 @@ from pathlib import Path
 
 DEFAULT_CHAR_FIXES = Path(__file__).resolve().parents[1] / "data" / "char_fixes.json"
 
+# 私有區 (PUA)：Wingdings / Symbol 字型的項目符號（廣達年報的「」），沒有語意，留著會黏在表名開頭
+_PUA = re.compile(r"[\ue000-\uf8ff]")
 _MULTI_SPACE = re.compile(r"[ \t　]+")
 _MULTI_NEWLINE = re.compile(r"\n{3,}")
 # 中文排版用字距對齊（「股　本」「差　異」），抽字後變成字間空白，
@@ -41,6 +43,7 @@ def normalize_text(text: str, char_fixes: dict[int, str] | None = None) -> str:
     if char_fixes:
         text = text.translate(char_fixes)
     text = text.replace("�", "")
+    text = _PUA.sub("", text)
     text = _MULTI_SPACE.sub(" ", text)
     text = _CJK_GAP.sub("", text)
     text = _MULTI_NEWLINE.sub("\n\n", text)

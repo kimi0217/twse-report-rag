@@ -7,8 +7,8 @@
 ## 目前進度
 
 - [x] PDF 前置檢查：`scripts/check_pdf_text.py`、`scripts/extract_financial_tables.py`、`scripts/textnorm.py`（說明見 `docs/pdf-preflight.md`）
-- [x] 年報資料：2308、2317、2330、2412、2454 的 2025 年報；財務表格抽取品質修正（PyMuPDF 重抽、內容篩選、表名、續表、錯字表）
-- [ ] 待決定：2412 中華電內文約 17% 中文字字碼錯誤（字型對應壞掉，表格頁不受影響），要換公司或只收表格
+- [x] 年報資料：2308、2317、2330、2382、2454 的 2025 年報；財務表格抽取品質修正（PyMuPDF 重抽、內容篩選、表名、續表、錯字表）
+- [x] 2412 中華電淘汰（內文約 17% 字被字型換成罕見字），原檔留在 `data/rejected/`，改用 2382 廣達；`check_pdf_text.py` 新增罕見字比例指標
 - [ ] ingestion：PDF 內文 + 表格 → chunk → embedding → PostgreSQL (pgvector)
 - [ ] 後端 API：FastAPI，`/companies`、`/ask`（SSE 串流）
 - [ ] 前端：React 聊天頁 + 引用卡片
@@ -40,6 +40,7 @@
 data/pdfs/            年報 PDF（不進 git），檔名格式：<股票代號>_<年度>.pdf，例如 2330_2025.pdf
 data/tables/          extract_financial_tables.py 的輸出（.md 給人看、.jsonl 給 ingestion），不進 git
 data/char_fixes.json  依 PDF 檔名設定的錯字替換表（進 git）
+data/rejected/        前置檢查 FAIL 的年報，留作 README 的證據（不進 git，ingestion 不讀）
 scripts/              離線資料處理（textnorm、檢查、表格抽取、ingest.py）
 backend/              FastAPI 服務
 frontend/             React + Vite + TypeScript + Tailwind

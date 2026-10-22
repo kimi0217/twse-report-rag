@@ -1,4 +1,4 @@
-"""產生測試用的假年報 PDF，模擬三種情況：正常、掃描檔、Big5 亂碼。
+"""產生測試用的假年報 PDF，模擬正常、掃描檔、Big5 亂碼、字型對應錯誤等情況。
 
 康熙部首問題無法用產生的 PDF 重現（寫入時會被轉回標準字），改在 test_pdf_tools.py 直接測字串。
 """
@@ -118,6 +118,18 @@ def make_big5_mojibake(path: Path) -> None:
     doc.save(path)
 
 
+# 中華電 2025 年報實際抽出的錯字：「聯合國企業與人權指導原則」→「耡合國企噟和人奙䭷㼫原則」
+REMAPPED = str.maketrans({"聯": "耡", "業": "噟", "權": "奙", "司": "莄", "報": "顺", "務": "袙"})
+
+
+def make_remapped(path: Path) -> None:
+    """字型對應表壞掉：字是合法中文字碼，但被換成罕見字，亂碼比例與關鍵詞都抓不到。"""
+    doc = pymupdf.open()
+    for _ in range(4):
+        _text_page(doc, BODY.translate(REMAPPED))
+    doc.save(path)
+
+
 def make_all(out: Path) -> dict[str, Path]:
     out.mkdir(parents=True, exist_ok=True)
     paths = {
@@ -126,12 +138,14 @@ def make_all(out: Path) -> dict[str, Path]:
         "mojibake": out / "mojibake.pdf",
         "spread": out / "spread.pdf",
         "continued": out / "continued.pdf",
+        "remapped": out / "remapped.pdf",
     }
     make_good(paths["good"])
     make_scanned(paths["scanned"])
     make_big5_mojibake(paths["mojibake"])
     make_spread(paths["spread"])
     make_continued(paths["continued"])
+    make_remapped(paths["remapped"])
     return paths
 
 
