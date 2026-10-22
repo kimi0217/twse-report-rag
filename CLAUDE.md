@@ -2,7 +2,7 @@
 
 台灣上市櫃公司年報 AI 問答助理。使用者用中文提問，系統從年報 PDF 檢索相關段落與財務表格，串流回答並附上引用來源（公司、年度、頁碼）。
 
-這是**求職作品集**，開發時程 1～2 天。優先順序：能跑通 > 程式碼清楚好講解 > 功能多。
+這是**練習專案**，開發時程 1～2 天。優先順序：能跑通 > 程式碼清楚好講解 > 功能多。
 
 ## 目前進度
 
@@ -89,7 +89,7 @@ chunks(
 - **所有從 PDF 來的文字都要經過 `common/textnorm.normalize_text()`**，使用者的問題在檢索前也要。
 - **PDF 文字一律套用 `data/char_fixes.json`**：用 `load_char_fixes(pdf檔名)` 取得對照表，傳給 `normalize_text(text, char_fixes)`。這是字型把字對應錯（例如中華電「新」→「倝」），NFKC 修不好，只能依檔名人工維護；只能一字換一字。發現新錯字就加進這個檔，再重跑表格抽取與 ingestion。使用者的問題不套用。
 - 表格 chunk 規則（`extract_financial_tables.py` 已實作）：項目欄須含財務項目；表名含「治理」「道德」「永續」「氣候」者排除；不收文字對齊（text-fallback）表格；頁首無表名的表沿用上一頁表名加「（續）」；jsonl 的 `tool` 記錄抽取工具（`pdfplumber` / `pymupdf`）。
-- **不使用 LangChain / LlamaIndex**：chunking、檢索、prompt 組裝自己寫，這是面試要講解的核心。
+- **不使用 LangChain / LlamaIndex**：chunking、檢索、prompt 組裝自己寫，這是本專案主要想練習與說明的部分。
 - 檢索結果不足或相關性太低時，回答「年報中查無相關資料」，不可臆測。程式層：最相近 chunk 距離超過 `NO_ANSWER_DISTANCE` 就不呼叫 LLM；問題提到已知公司（含別名）時自動只檢索該公司。prompt 要求模型只根據提供的段落回答，並標註引用編號。
 - 所有設定走環境變數，維護 `.env.example`；**不 commit 任何 key 或 `.env`**。
 - 後端用 async；request/response 一律用 Pydantic model。

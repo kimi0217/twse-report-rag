@@ -255,6 +255,10 @@ docker compose up -d --build
 
 </details>
 
+## 開發方式
+
+使用 [Claude Code](https://claude.com/claude-code) 協助實作；架構設計、資料品質判斷與評估方法由我主導。開發時給 Claude Code 的指引（目標、資料模型、開發規則與工作方式）見 [`CLAUDE.md`](CLAUDE.md)。
+
 ## 資料來源
 
 年報 PDF 來自[臺灣證券交易所](https://www.twse.com.tw/)文件伺服器（doc.twse.com.tw）與[公開資訊觀測站](https://mops.twse.com.tw/)，為各公司依法公開揭露的 2025 年度股東會年報，著作權屬於各公司。本專案只作為技術展示與學習用途：repo 裡不含 PDF；GitHub Release 的資料庫 seed 含有從年報抽出的文字與表格，用於重現問答結果。回答內容由 AI 產生，可能有誤，不構成投資建議，請以原始年報為準。
