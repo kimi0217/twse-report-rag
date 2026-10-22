@@ -8,6 +8,10 @@ URL="${SEED_URL:-https://github.com/kimi0217/twse-report-rag/releases/download/$
 mkdir -p data/seed
 echo "下載 $URL"
 curl -fL --retry 3 -o data/seed/chunks.dump "$URL"
-# 檢查檔案完整，避免下載到一半或錯的版本
-(cd data/seed && shasum -a 256 -c chunks.dump.sha256)
+# 檢查檔案完整，避免下載到一半或錯的版本。Linux 多半只有 sha256sum，macOS 只有 shasum
+if command -v sha256sum >/dev/null 2>&1; then
+  (cd data/seed && sha256sum -c chunks.dump.sha256)
+else
+  (cd data/seed && shasum -a 256 -c chunks.dump.sha256)
+fi
 echo "完成：data/seed/chunks.dump"

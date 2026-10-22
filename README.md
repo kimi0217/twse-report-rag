@@ -12,6 +12,7 @@
 
 - **Docker**：[Docker Desktop](https://www.docker.com/products/docker-desktop/) 或 [OrbStack](https://orbstack.dev/)（Mac），裝好後要先開啟。
 - **Ollama**：[ollama.com/download](https://ollama.com/download)，請用最新版（舊版下載不了 `qwen3.5:2b`）。Ollama 直接裝在主機上，不放進 Docker：Mac 的 Docker 用不到 GPU。
+- `git`、`curl`（macOS 內建；`fetch_seed.sh` 用 curl 下載）。
 
 ### 步驟
 
@@ -34,6 +35,8 @@ docker compose up -d --build
 ```
 
 打開 <http://localhost:8080>，點範例問題或直接輸入問題。
+
+- **第一次建置**：會下載 Python、Node、nginx 的 base image（約 300 MB），之後重建只要幾十秒。
 
 - **第一次啟動**：db 會自動還原 seed，約需 1～2 分鐘，完成前 backend 不會啟動。可以用 `docker compose ps` 確認三個服務都是 running（db、backend 會顯示 healthy）。
 - **第一次提問**：Ollama 要先載入模型，約 15 秒；之後每題約 5～15 秒。
