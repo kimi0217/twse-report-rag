@@ -5,6 +5,7 @@ from pathlib import Path
 
 import pymupdf
 import pytest
+from conftest import skip_or_fail_without_db
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
@@ -209,7 +210,7 @@ def db():
     try:
         conn = psycopg.connect(url, connect_timeout=2)
     except psycopg.OperationalError:
-        pytest.skip("連不上測試資料庫")
+        skip_or_fail_without_db()
     conn.execute("DROP TABLE IF EXISTS chunks")
     conn.commit()
     ingest.ensure_schema(conn, FakeEmbedder.dim)

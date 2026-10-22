@@ -1,0 +1,98 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+# 同一個分支有新 push 時，取消還在跑的舊工作
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend:
+    name: backend (pytest)
+    runs-on: ubuntu-latest
+    services:
+      # 資料庫整合測試（ingest 寫入、PgRetriever 篩選）要真的跑，不能被跳過
+      db:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_USER: twse
+          POSTGRES_PASSWORD: twse
+          POSTGRES_DB: twse_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -h 127.0.0.1 -U twse -d twse_test"
+          --health-interval 5s --health-timeout 3s --health-retries 20
+    env:
+      TEST_DATABASE_URL: postgresql://twse:twse@localhost:5432/twse_test
+      # 連不上資料庫時讓測試失敗，而不是跳過
+      REQUIRE_DB_TESTS: "1"
+      # CI 沒有 Ollama：指向一定連不上的位址，萬一有測試忘了用 fake 會立刻失敗，而不是卡住
+      OLLAMA_BASE_URL: http://127.0.0.1:9
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: pip
+          cache-dependency-path: |
+            requirements-ingest.txt
+            backend/requirements.txt
+      - name: Install dependencies
+        run: pip install -r requirements-ingest.txt -r backend/requirements.txt
+      - name: Run pytest
+        # -rs 列出跳過的測試與原因；--junitxml 讓摘要能統計執行／跳過數
+        run: python -m pytest -q -rs -p no:cacheprovider --junitxml=pytest-report.xml
+      - name: Test summary
+        if: always()
+        run: |
+          python - <<'PY' >> "$GITHUB_STEP_SUMMARY"
+          import xml.etree.ElementTree as ET
+          s = ET.parse("pytest-report.xml").getroot().find("testsuite")
+          total, skipped = int(s.get("tests")), int(s.get("skipped"))
+          failed = int(s.get("failures")) + int(s.get("errors"))
+          print(f"pytest：共 {total} 個，執行 {total - skipped}，跳過 {skipped}，失敗 {failed}")
+          PY
+
+  frontend:
+    name: frontend (lint, vitest, build)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci
+      - run: npm run lint
+      - run: npm test
+      - run: npm run build
+
+  docker:
+    name: docker (build images)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - name: Build backend image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: backend/Dockerfile
+          push: false
+          cache-from: type=gha,scope=backend
+          cache-to: type=gha,mode=max,scope=backend
+      - name: Build frontend image
+        uses: docker/build-push-action@v6
+        with:
+          context: frontend
+          push: false
+          cache-from: type=gha,scope=frontend
+          cache-to: type=gha,mode=max,scope=frontend

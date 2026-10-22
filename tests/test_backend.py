@@ -7,6 +7,7 @@ import sys
 from pathlib import Path
 
 import pytest
+from conftest import skip_or_fail_without_db
 from fastapi.testclient import TestClient
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -247,7 +248,7 @@ def test_pg_retriever_filters_in_sql():
     try:
         conn = psycopg.connect(url, connect_timeout=2)
     except psycopg.OperationalError:
-        pytest.skip("連不上測試資料庫")
+        skip_or_fail_without_db()
     with conn:
         conn.execute("DROP TABLE IF EXISTS chunks")
         conn.commit()

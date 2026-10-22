@@ -1,5 +1,7 @@
 # twse-report-rag
 
+[![CI](https://github.com/kimi0217/twse-report-rag/actions/workflows/ci.yml/badge.svg)](https://github.com/kimi0217/twse-report-rag/actions/workflows/ci.yml)
+
 台灣上市公司年報 AI 問答助理：用中文提問，系統從年報 PDF 檢索相關段落與財務表格，串流回答並附上引用來源（公司、年度、頁碼）。完全在本機執行，不需要任何 API key。
 
 目前收錄 5 家公司的 2025 年度（民國 114 年度）股東會年報：台達電（2308）、鴻海（2317）、台積電（2330）、廣達（2382）、聯發科（2454）。
