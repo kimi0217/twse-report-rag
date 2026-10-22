@@ -11,6 +11,7 @@ sys.path.insert(0, str(ROOT / "scripts"))
 
 import ingest  # noqa: E402
 from embeddings import CachedEmbedder  # noqa: E402
+from textnorm import normalize_text  # noqa: E402
 from ingest import (  # noqa: E402
     MAX_CHUNK,
     MIN_CHUNK,
@@ -21,6 +22,7 @@ from ingest import (  # noqa: E402
     page_paragraphs,
     page_regions,
     MAX_TABLE_CHARS,
+    load_table_boxes,
     parse_filename,
     pdf_chunks,
     table_chunks,
@@ -228,8 +230,8 @@ def test_ingest_is_idempotent_and_keeps_tables(db, tmp_path):
     db.commit()
     companies = {"2330": "台積電"}
 
-    first = ingest.ingest_pdf(db, path, FakeEmbedder(), companies)
-    ingest.ingest_pdf(db, path, FakeEmbedder(), companies)
+    first = ingest.ingest_pdf(db, path, FakeEmbedder(), companies, tables_dir=tmp_path)
+    ingest.ingest_pdf(db, path, FakeEmbedder(), companies, tables_dir=tmp_path)
 
     assert _count(db, "text") == len(first) > 1
     assert _count(db, "table") == 1  # 重跑內文不能刪到表格 chunk
@@ -240,7 +242,7 @@ def test_ingest_is_idempotent_and_keeps_tables(db, tmp_path):
 def test_ingest_rejects_unknown_ticker(db, tmp_path):
     path = _pdf(tmp_path / "9999_2025.pdf", [{"size": (595, 842), "texts": [(50, 50, 480, 600, SENTENCE * 10)]}])
     with pytest.raises(KeyError):
-        ingest.ingest_pdf(db, path, FakeEmbedder(), {"2330": "台積電"})
+        ingest.ingest_pdf(db, path, FakeEmbedder(), {"2330": "台積電"}, tables_dir=tmp_path)
 
 
 def test_schema_dimension_mismatch_raises(db):
@@ -283,15 +285,51 @@ def test_oversized_table_raises_instead_of_splitting(tmp_path):
 
 def test_text_and_table_reingest_do_not_touch_each_other(db, tmp_path):
     pdf = _pdf(tmp_path / "2330_2025.pdf", [{"size": (595, 842), "texts": [(50, 50, 480, 600, SENTENCE * 30)]}])
-    jsonl = _jsonl(tmp_path / "2330_2025.jsonl", [TABLE, {**TABLE, "page": 64, "table_index": 1}])
+    # jsonl 放另一個資料夾：這裡只測 kind 互不影響，不測表格範圍去重
+    tables = tmp_path / "tables"
+    tables.mkdir()
+    jsonl = _jsonl(tables / "2330_2025.jsonl", [TABLE, {**TABLE, "page": 64, "table_index": 1}])
     companies = {"2330": "台積電"}
 
-    texts = ingest.ingest_pdf(db, pdf, FakeEmbedder(), companies)
+    texts = ingest.ingest_pdf(db, pdf, FakeEmbedder(), companies, tables_dir=tmp_path)
     ingest.ingest_tables(db, jsonl, FakeEmbedder(), companies)
     ingest.ingest_tables(db, jsonl, FakeEmbedder(), companies)  # 重跑表格
     assert (_count(db, "text"), _count(db, "table")) == (len(texts), 2)
 
-    ingest.ingest_pdf(db, pdf, FakeEmbedder(), companies)  # 重跑內文
+    ingest.ingest_pdf(db, pdf, FakeEmbedder(), companies, tables_dir=tmp_path)  # 重跑內文
     assert (_count(db, "text"), _count(db, "table")) == (len(texts), 2)
     row = db.execute("SELECT title, page FROM chunks WHERE kind = 'table' ORDER BY page DESC LIMIT 1").fetchone()
     assert row == (TABLE["title"], 65)
+
+
+# --- 表格範圍內的內文去重 ---
+
+
+def _page_with_table(tmp_path: Path) -> Path:
+    # 上方說明文字在表格外；下方一行模擬 PDF 文字層裡攤平的表格數字
+    return _pdf(tmp_path / "2382_2025.pdf", [{"size": (595, 842), "texts": [
+        (50, 50, 480, 200, SENTENCE * 6),
+        (50, 300, 480, 30, "每股盈餘(元)15.4919.453.96 25.56%"),
+    ]}])
+
+
+def test_load_table_boxes(tmp_path):
+    path = _jsonl(tmp_path / "2382_2025.jsonl", [{**TABLE, "page": 1, "bbox": [40, 290, 560, 340]}, TABLE])
+    boxes = load_table_boxes(path)
+    assert list(boxes) == [1]  # 沒有 bbox 的舊格式資料略過
+    assert load_table_boxes(tmp_path / "missing.jsonl") == {}
+
+
+def test_text_inside_table_bbox_skipped(tmp_path):
+    path = _page_with_table(tmp_path)
+    with pymupdf.open(path) as doc:
+        assert len(page_paragraphs(doc[0])) == 2
+        kept = page_paragraphs(doc[0], table_boxes=[pymupdf.Rect(40, 290, 560, 340)])
+    assert kept == [normalize_text(SENTENCE * 6)]
+
+
+def test_ingest_pdf_uses_table_boxes(db, tmp_path):
+    path = _page_with_table(tmp_path)
+    _jsonl(tmp_path / "2382_2025.jsonl", [{**TABLE, "page": 1, "bbox": [40, 290, 560, 340]}])
+    chunks = ingest.ingest_pdf(db, path, FakeEmbedder(), {"2382": "廣達"}, tables_dir=tmp_path)
+    assert chunks and not any("15.49" in c.content for c in chunks)

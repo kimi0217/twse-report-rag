@@ -19,6 +19,9 @@
    頁首第一張表沒有表名時，沿用上一頁最後一張表的表名加「（續）」。
 6. 表名含「治理」「道德」「永續」「氣候」的表丟掉：項目欄偶爾會提到資產、負債，躲過第 4 步。
 7. 依 data/char_fixes.json 修正個別 PDF 的錯字（字型對應錯誤，NFKC 修不好）。
+8. 表名前面補「合併」「個體」：台積電用「及子公司」表示合併報表，embedding 分不出兩張表，
+   問「合併營收」時個體表反而排在前面。判斷不出來就不補，不猜。
+9. jsonl 記錄表格 bbox，ingestion 用來跳過表格範圍內的內文，避免同一張表以攤平的數字重複出現。
 """
 
 from __future__ import annotations
@@ -176,6 +179,24 @@ def is_excluded_title(title: str) -> bool:
     return any(w in title for w in EXCLUDED_TITLE_WORDS)
 
 
+def label_scopes(titles: list[str]) -> list[str]:
+    """同一頁的表名依序傳入，回傳補上「合併」「個體」的表名。
+
+    個體只在兩種情況判定：表名明寫「個體」，或同頁另一張已判定為合併、這張沒有任何標記。
+    """
+    def scope(title: str) -> str | None:
+        if "合併" in title or "及子公司" in title:
+            return "合併"
+        if "個體" in title:
+            return "個體"
+        return None
+
+    scopes = [scope(t) for t in titles]
+    if "合併" in scopes:
+        scopes = [s or "個體" for s in scopes]
+    return [f"{s} {t}" if s and not t.startswith(s) else t for s, t in zip(scopes, titles)]
+
+
 def continued_title(prev_title: str) -> str:
     # 跨三頁以上的表，上一頁已經是「…（續）」，不要變成「（續）（續）」
     return prev_title.removesuffix(CONTINUED) + CONTINUED
@@ -207,6 +228,7 @@ def extract(
             if i >= len(pdf.pages):
                 continue
             k = 0
+            page_tables: list[dict] = []
             for t in pdf.pages[i].find_tables():
                 table, bbox, tool = clean_table(t.extract(), char_fixes), t.bbox, "pdfplumber"
                 if not is_useful(table):
@@ -229,19 +251,25 @@ def extract(
                     stats["excluded_title"] = stats.get("excluded_title", 0) + 1
                     continue
                 k += 1
-                last_title_by_page[i] = title
-                results.append(
+                page_tables.append(
                     {
                         "file": path.name,
                         "page": i + 1,
                         "table_index": k,
                         "title": title,
                         "tool": tool,
+                        "bbox": [round(x, 1) for x in bbox],
                         "rows": len(table),
                         "cols": len(table[0]),
                         "markdown": to_markdown(table),
                     }
                 )
+            # 整頁的表都確定後才補合併／個體：「沒標記的判為個體」要看同頁其他表
+            for t, labeled in zip(page_tables, label_scopes([t["title"] for t in page_tables])):
+                t["title"] = labeled
+            if page_tables:
+                last_title_by_page[i] = page_tables[-1]["title"]
+            results += page_tables
     return results
 
 

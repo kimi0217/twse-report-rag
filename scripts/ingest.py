@@ -17,7 +17,10 @@ data/tables/<同檔名>.jsonl，所以表格要先抽好。
    年報內文多寫「本公司」，不加公司名，問「台積電研發費用」時向量對不到正確公司。
 6. 每份 PDF、每種 kind 一個 transaction：先刪該公司該年度同 kind 的舊資料再寫入，
    重跑不會重複，重跑內文也不會刪到表格（反之亦然）。
-7. 表格一張一個 chunk，不切：切開後數字會跟表頭、項目欄分家，看不出是哪一年、哪個項目。
+7. 已抽成表格 chunk 的範圍（jsonl 的 bbox），內文就跳過：PDF 文字層的表格會攤平成
+   「15.4919.453.96」這種黏在一起的數字，檢索時排在表格前面，模型還可能讀錯。
+   表格外的說明文字照樣保留。
+8. 表格一張一個 chunk，不切：切開後數字會跟表頭、項目欄分家，看不出是哪一年、哪個項目。
    content 是「表名 + markdown」，表名同時存 title。
 """
 
@@ -56,6 +59,8 @@ MIN_PAGE_CHARS = 100
 # 單獨成塊的章節標題、頁尾殘字；太短沒有檢索價值
 MIN_KEEP = 50
 SENTENCE_END = "。！？；!?;\n"
+# 文字區塊有過半面積落在表格 bbox 內，就當成表格的一部分
+TABLE_OVERLAP = 0.5
 # bge-m3 上限 8192 token；實測財務表格約 0.62 token/字，6000 字約 3700 token，留一倍餘裕。
 # Ollama 超過上限會靜默截斷，表格後半的數字就查不到，所以寧可停下來讓人處理
 MAX_TABLE_CHARS = 6000
@@ -122,12 +127,36 @@ def page_regions(page: pymupdf.Page) -> list[pymupdf.Rect]:
     return [pymupdf.Rect(r.x0, r.y0, mid, r.y1), pymupdf.Rect(mid, r.y0, r.x1, r.y1)]
 
 
-def page_paragraphs(page: pymupdf.Page, char_fixes: dict[int, str] | None = None) -> list[str]:
+def load_table_boxes(path: Path) -> dict[int, list[pymupdf.Rect]]:
+    """讀表格 jsonl 的 bbox → {頁碼(1-based): [Rect, ...]}；沒有檔案或舊格式沒有 bbox 就回傳空的。"""
+    boxes: dict[int, list[pymupdf.Rect]] = {}
+    if not path.exists():
+        return boxes
+    with open(path, encoding="utf-8") as fp:
+        for line in fp:
+            if line.strip() and (t := json.loads(line)).get("bbox"):
+                boxes.setdefault(t["page"], []).append(pymupdf.Rect(t["bbox"]))
+    return boxes
+
+
+def in_table(block: pymupdf.Rect, tables: list[pymupdf.Rect]) -> bool:
+    area = block.get_area()
+    return area > 0 and any((block & t).get_area() / area > TABLE_OVERLAP for t in tables)
+
+
+def page_paragraphs(
+    page: pymupdf.Page,
+    char_fixes: dict[int, str] | None = None,
+    table_boxes: list[pymupdf.Rect] | None = None,
+) -> list[str]:
     paragraphs: list[str] = []
     for clip in page_regions(page):
         open_para = False  # 上一個區塊還沒結束，換半頁時不續接
         for x0, y0, x1, y1, text, _no, block_type in page.get_text("blocks", clip=clip):
             if block_type != 0:  # 圖片區塊
+                continue
+            if table_boxes and in_table(pymupdf.Rect(x0, y0, x1, y1), table_boxes):
+                open_para = False
                 continue
             # 區塊內的換行是排版折行，不是段落；中文直接接起來
             para = normalize_text(text.replace("\n", ""), char_fixes)
@@ -194,12 +223,17 @@ def chunk_paragraphs(paragraphs: list[str]) -> list[str]:
     return chunks
 
 
-def pdf_chunks(path: Path, char_fixes: dict[int, str] | None = None) -> list[Chunk]:
+def pdf_chunks(
+    path: Path,
+    char_fixes: dict[int, str] | None = None,
+    table_boxes: dict[int, list[pymupdf.Rect]] | None = None,
+) -> list[Chunk]:
     out: list[Chunk] = []
     section = ""
+    table_boxes = table_boxes or {}
     with pymupdf.open(path) as doc:
         for i, page in enumerate(doc):
-            paragraphs = page_paragraphs(page, char_fixes)
+            paragraphs = page_paragraphs(page, char_fixes, table_boxes.get(i + 1))
             text = "".join(paragraphs)
             if len(text) < MIN_PAGE_CHARS or TOC_HINT.search(text):
                 continue
@@ -291,10 +325,11 @@ def ingest_pdf(
     embedder: Embedder,
     companies: dict[str, str],
     char_fixes_path: Path | None = None,
+    tables_dir: Path = DEFAULT_TABLES,
 ) -> list[Chunk]:
     ticker, company, year = _company(path, companies)
     fixes = load_char_fixes(path.name, char_fixes_path) if char_fixes_path else load_char_fixes(path.name)
-    chunks = pdf_chunks(path, fixes)
+    chunks = pdf_chunks(path, fixes, load_table_boxes(tables_dir / f"{path.stem}.jsonl"))
     _replace_chunks(conn, ticker, company, year, "text", chunks, embedder)
     return chunks
 
@@ -330,7 +365,7 @@ def main() -> int:
         for f in files:
             jobs = []
             if args.kind in ("all", "text"):
-                jobs.append(("text", lambda f=f: ingest_pdf(conn, f, embedder, companies)))
+                jobs.append(("text", lambda f=f: ingest_pdf(conn, f, embedder, companies, tables_dir=args.tables)))
             if args.kind in ("all", "table"):
                 jsonl = args.tables / f"{f.stem}.jsonl"
                 if jsonl.exists():

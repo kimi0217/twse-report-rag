@@ -16,6 +16,7 @@ from extract_financial_tables import (  # noqa: E402
     find_candidate_pages,
     has_labels,
     is_excluded_title,
+    label_scopes,
     is_financial,
     parse_pages,
     pick_title,
@@ -234,3 +235,27 @@ def test_remapped_pdf_fails_only_on_rare_ratio(pdfs, tmp_path):
 
 def test_private_use_bullets_removed():
     assert normalize_text("\uf06c 經營結果比較分析") == "經營結果比較分析"
+
+
+# --- 合併／個體標記 ---
+
+
+@pytest.mark.parametrize(
+    "titles, expected",
+    [
+        # 台積電：「及子公司」= 合併，同頁沒標記的那張判為個體
+        (["台積公司財務報表", "台積公司及子公司財務報表"], ["個體 台積公司財務報表", "合併 台積公司及子公司財務報表"]),
+        (["最近二年度個體財務狀況比較分析表"], ["個體 最近二年度個體財務狀況比較分析表"]),
+        (["合併財務報表"], ["合併財務報表"]),  # 已經以「合併」開頭，不重複補
+        (["經營結果比較分析"], ["經營結果比較分析"]),  # 判斷不出來：維持原樣，不猜
+        (["財務狀況分析", "現金流量分析"], ["財務狀況分析", "現金流量分析"]),  # 同頁都沒標記也不猜
+    ],
+)
+def test_label_scopes(titles, expected):
+    assert label_scopes(titles) == expected
+
+
+def test_spread_tables_labeled_and_have_bbox(pdfs):
+    tables = extract(pdfs["spread"], [0])
+    assert all(len(t["bbox"]) == 4 for t in tables)
+    assert sorted(t["title"] for t in tables) == ["個體財務報表（單位:新台幣仟元）", "合併財務報表"]
