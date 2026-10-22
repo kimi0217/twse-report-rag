@@ -81,6 +81,21 @@ def make_spread(path: Path) -> None:
     doc.save(path)
 
 
+def make_continued(path: Path) -> None:
+    """一張表跨兩頁（第 2 頁頁首的表沒有表名），第 3 頁是表名含「永續」、項目欄卻有「資產」的表。"""
+    doc = pymupdf.open()
+    rows = [["項目", "114年", "113年"], ["流動資產", "117,371", "112,968"], ["資產總額", "535,871", "534,491"]]
+    page = doc.new_page()
+    page.insert_text((50, 100), "合併財務狀況比較分析表", fontname=FONT, fontsize=11)
+    _ruled_table(page, 110, rows)
+    page = doc.new_page()
+    _ruled_table(page, 40, [rows[0], ["負債總額", "135,081", "136,386"], ["權益總額", "400,790", "398,104"]])
+    page = doc.new_page()
+    page.insert_text((50, 100), "永續相關風險之財務影響表", fontname=FONT, fontsize=11)
+    _ruled_table(page, 110, [["項目", "影響金額", "說明"], ["擱淺資產", "6,000", "氣候風險"]])
+    doc.save(path)
+
+
 def make_scanned(path: Path) -> None:
     """把正常頁面轉成圖片再貼回去，模擬掃描檔（沒有文字層）。"""
     src = pymupdf.open()
@@ -110,11 +125,13 @@ def make_all(out: Path) -> dict[str, Path]:
         "scanned": out / "scanned.pdf",
         "mojibake": out / "mojibake.pdf",
         "spread": out / "spread.pdf",
+        "continued": out / "continued.pdf",
     }
     make_good(paths["good"])
     make_scanned(paths["scanned"])
     make_big5_mojibake(paths["mojibake"])
     make_spread(paths["spread"])
+    make_continued(paths["continued"])
     return paths
 
 

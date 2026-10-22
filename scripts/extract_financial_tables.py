@@ -16,6 +16,9 @@
    重抽還是不合格就丟掉。jsonl 的 tool 欄位記錄最後用哪個工具。
 4. 只留含財務項目（營業收入、資產、負債…）的表格，排除 ESG、公司治理等表。
 5. 表名取表格正上方、同一欄位範圍內最近的文字行（跨頁版 PDF 一頁有左右兩張表）。
+   頁首第一張表沒有表名時，沿用上一頁最後一張表的表名加「（續）」。
+6. 表名含「治理」「道德」「永續」「氣候」的表丟掉：項目欄偶爾會提到資產、負債，躲過第 4 步。
+7. 依 data/char_fixes.json 修正個別 PDF 的錯字（字型對應錯誤，NFKC 修不好）。
 """
 
 from __future__ import annotations
@@ -30,7 +33,7 @@ import pdfplumber
 import pymupdf
 
 sys.path.insert(0, str(Path(__file__).parent))
-from textnorm import normalize_text  # noqa: E402
+from textnorm import load_char_fixes, normalize_text  # noqa: E402
 
 DEFAULT_KEYWORDS = [
     "財務概況",
@@ -50,6 +53,8 @@ DETACHED_COMMAS = re.compile(r"(\(?)(-?\d+)(\)?)\n[,\s]+")
 TITLE_SEARCH_HEIGHT = 80
 # 表名常比表格左緣多凸出一點（「7.1 合併財務報表」的 7 會被切掉）；跨頁版左右兩表間距約 100pt，20pt 不會越界
 TITLE_SEARCH_MARGIN = 20
+EXCLUDED_TITLE_WORDS = ["治理", "道德", "永續", "氣候"]
+CONTINUED = "（續）"
 
 
 def parse_pages(spec: str) -> list[int]:
@@ -79,14 +84,14 @@ def _fix_detached_commas(cell: str) -> str:
     return f"{left}{int(digits):,}{right}"
 
 
-def clean_cell(cell: str | None) -> str:
+def clean_cell(cell: str | None, char_fixes: dict[int, str] | None = None) -> str:
     if cell is None:
         return ""
-    return normalize_text(_fix_detached_commas(cell)).replace("\n", "").replace("|", "\\|")
+    return normalize_text(_fix_detached_commas(cell), char_fixes).replace("\n", "").replace("|", "\\|")
 
 
-def clean_table(rows: list[list[str | None]]) -> list[list[str]]:
-    table = [[clean_cell(c) for c in row] for row in rows]
+def clean_table(rows: list[list[str | None]], char_fixes: dict[int, str] | None = None) -> list[list[str]]:
+    table = [[clean_cell(c, char_fixes) for c in row] for row in rows]
     table = [r for r in table if any(r)]
     if not table:
         return []
@@ -109,14 +114,14 @@ def to_markdown(table: list[list[str]]) -> str:
     return "\n".join(lines)
 
 
-def pick_title(lines_above: list[str]) -> str:
+def pick_title(lines_above: list[str], char_fixes: dict[int, str] | None = None) -> str:
     """lines_above 由上到下排列；最後一行離表格最近。
 
     純數字行（頁碼、上一張表的殘行）跳過；優先選含「表」「分析」的行。
     「合併」「個體」決定數字是哪一份報表，選中的行沒有就把那一行補在前面，
     否則問「合併營收」時可能拿到個體報表的數字。
     """
-    lines = [ln for ln in (normalize_text(x) for x in lines_above) if ln and not NUMERIC_LINE.fullmatch(ln)]
+    lines = [ln for ln in (normalize_text(x, char_fixes) for x in lines_above) if ln and not NUMERIC_LINE.fullmatch(ln)]
     if not lines:
         return ""
     nearest_first = lines[::-1]
@@ -167,31 +172,48 @@ def _overlap(a: tuple, b: tuple) -> float:
     return max(w, 0) * max(h, 0)
 
 
-def reextract_with_pymupdf(page: pymupdf.Page, bbox: tuple) -> tuple[list[list[str]], tuple] | None:
+def is_excluded_title(title: str) -> bool:
+    return any(w in title for w in EXCLUDED_TITLE_WORDS)
+
+
+def continued_title(prev_title: str) -> str:
+    # 跨三頁以上的表，上一頁已經是「…（續）」，不要變成「（續）（續）」
+    return prev_title.removesuffix(CONTINUED) + CONTINUED
+
+
+def reextract_with_pymupdf(
+    page: pymupdf.Page, bbox: tuple, char_fixes: dict[int, str] | None = None
+) -> tuple[list[list[str]], tuple] | None:
     """在同一頁找跟 pdfplumber 表格重疊最多的那張 PyMuPDF 表格。"""
     candidates = [t for t in page.find_tables().tables if _overlap(t.bbox, bbox) > 0]
     if not candidates:
         return None
     best = max(candidates, key=lambda t: _overlap(t.bbox, bbox))
-    return clean_table(best.extract()), tuple(best.bbox)
+    return clean_table(best.extract(), char_fixes), tuple(best.bbox)
 
 
-def extract(path: Path, pages: list[int], stats: dict[str, int] | None = None) -> list[dict]:
+def extract(
+    path: Path,
+    pages: list[int],
+    stats: dict[str, int] | None = None,
+    char_fixes: dict[int, str] | None = None,
+) -> list[dict]:
     """stats 會累計丟棄原因，讓 CLI 印出來，方便判斷篩選規則是否太嚴。"""
     stats = stats if stats is not None else {}
     results = []
+    last_title_by_page: dict[int, str] = {}
     with pdfplumber.open(path) as pdf, pymupdf.open(path) as doc:
         for i in pages:
             if i >= len(pdf.pages):
                 continue
             k = 0
             for t in pdf.pages[i].find_tables():
-                table, bbox, tool = clean_table(t.extract()), t.bbox, "pdfplumber"
+                table, bbox, tool = clean_table(t.extract(), char_fixes), t.bbox, "pdfplumber"
                 if not is_useful(table):
                     continue
                 # 先修項目欄再判斷是不是財務表：項目欄空白時財務關鍵字也一起不見了
                 if not has_labels(table):
-                    retry = reextract_with_pymupdf(doc[i], bbox)
+                    retry = reextract_with_pymupdf(doc[i], bbox, char_fixes)
                     if retry is None or not is_useful(retry[0]) or not has_labels(retry[0]):
                         stats["no_labels"] = stats.get("no_labels", 0) + 1
                         continue
@@ -200,13 +222,20 @@ def extract(path: Path, pages: list[int], stats: dict[str, int] | None = None) -
                 if not is_financial(table):
                     stats["not_financial"] = stats.get("not_financial", 0) + 1
                     continue
+                title = pick_title(title_lines_above(doc[i], bbox), char_fixes)
+                if not title and k == 0 and last_title_by_page.get(i - 1):
+                    title = continued_title(last_title_by_page[i - 1])
+                if is_excluded_title(title):
+                    stats["excluded_title"] = stats.get("excluded_title", 0) + 1
+                    continue
                 k += 1
+                last_title_by_page[i] = title
                 results.append(
                     {
                         "file": path.name,
                         "page": i + 1,
                         "table_index": k,
-                        "title": pick_title(title_lines_above(doc[i], bbox)),
+                        "title": title,
                         "tool": tool,
                         "rows": len(table),
                         "cols": len(table[0]),
@@ -222,6 +251,7 @@ def main() -> int:
     ap.add_argument("--pages", help="手動指定頁碼，例如 120-135,140（只適用單一檔案）")
     ap.add_argument("--keywords", help="自訂關鍵字，逗號分隔")
     ap.add_argument("--out", type=Path, default=Path("data/tables"))
+    ap.add_argument("--char-fixes", type=Path, default=Path("data/char_fixes.json"), help="依檔名設定的錯字替換表")
     args = ap.parse_args()
 
     files: list[Path] = []
@@ -233,7 +263,7 @@ def main() -> int:
     for f in files:
         pages = parse_pages(args.pages) if args.pages else find_candidate_pages(f, keywords)
         stats: dict[str, int] = {}
-        tables = extract(f, pages, stats)
+        tables = extract(f, pages, stats, load_char_fixes(f.name, args.char_fixes))
 
         md = [f"# {f.name} 財務表格\n"]
         for t in tables:
@@ -248,7 +278,7 @@ def main() -> int:
         page_list = ", ".join(str(p + 1) for p in pages[:15]) + (" …" if len(pages) > 15 else "")
         print(f"{f.name}: 候選頁 {len(pages)} 頁 [{page_list}] → 抽出 {len(tables)} 張表"
               f"（PyMuPDF 重抽 {stats.get('pymupdf', 0)}；丟棄：非財務 {stats.get('not_financial', 0)}、"
-              f"項目欄空白 {stats.get('no_labels', 0)}）")
+              f"項目欄空白 {stats.get('no_labels', 0)}、排除表名 {stats.get('excluded_title', 0)}）")
     print(f"\n輸出：{args.out}/")
     return 0
 

@@ -7,6 +7,8 @@
 ## 目前進度
 
 - [x] PDF 前置檢查：`scripts/check_pdf_text.py`、`scripts/extract_financial_tables.py`、`scripts/textnorm.py`（說明見 `docs/pdf-preflight.md`）
+- [x] 年報資料：2308、2317、2330、2412、2454 的 2025 年報；財務表格抽取品質修正（PyMuPDF 重抽、內容篩選、表名、續表、錯字表）
+- [ ] 待決定：2412 中華電內文約 17% 中文字字碼錯誤（字型對應壞掉，表格頁不受影響），要換公司或只收表格
 - [ ] ingestion：PDF 內文 + 表格 → chunk → embedding → PostgreSQL (pgvector)
 - [ ] 後端 API：FastAPI，`/companies`、`/ask`（SSE 串流）
 - [ ] 前端：React 聊天頁 + 引用卡片
@@ -36,7 +38,8 @@
 
 ```
 data/pdfs/            年報 PDF（不進 git），檔名格式：<股票代號>_<年度>.pdf，例如 2330_2025.pdf
-data/tables/          extract_financial_tables.py 的輸出（.md 給人看、.jsonl 給 ingestion）
+data/tables/          extract_financial_tables.py 的輸出（.md 給人看、.jsonl 給 ingestion），不進 git
+data/char_fixes.json  依 PDF 檔名設定的錯字替換表（進 git）
 scripts/              離線資料處理（textnorm、檢查、表格抽取、ingest.py）
 backend/              FastAPI 服務
 frontend/             React + Vite + TypeScript + Tailwind
@@ -79,6 +82,8 @@ chunks(
 ## 開發規則
 
 - **所有從 PDF 來的文字都要經過 `scripts/textnorm.normalize_text()`**，使用者的問題在檢索前也要。
+- **PDF 文字一律套用 `data/char_fixes.json`**：用 `load_char_fixes(pdf檔名)` 取得對照表，傳給 `normalize_text(text, char_fixes)`。這是字型把字對應錯（例如中華電「新」→「倝」），NFKC 修不好，只能依檔名人工維護；只能一字換一字。發現新錯字就加進這個檔，再重跑表格抽取與 ingestion。使用者的問題不套用。
+- 表格 chunk 規則（`extract_financial_tables.py` 已實作）：項目欄須含財務項目；表名含「治理」「道德」「永續」「氣候」者排除；不收文字對齊（text-fallback）表格；頁首無表名的表沿用上一頁表名加「（續）」；jsonl 的 `tool` 記錄抽取工具（`pdfplumber` / `pymupdf`）。
 - **不使用 LangChain / LlamaIndex**：chunking、檢索、prompt 組裝自己寫，這是面試要講解的核心。
 - 檢索結果不足或相關性太低時，回答「年報中查無相關資料」，不可臆測。prompt 要求模型只根據提供的段落回答，並標註引用編號。
 - 所有設定走環境變數，維護 `.env.example`；**不 commit 任何 key 或 `.env`**。

@@ -11,15 +11,17 @@ from check_pdf_text import KANGXI, check_pdf  # noqa: E402
 import extract_financial_tables as eft  # noqa: E402
 from extract_financial_tables import (  # noqa: E402
     _fix_detached_commas,
+    continued_title,
     extract,
     find_candidate_pages,
     has_labels,
+    is_excluded_title,
     is_financial,
     parse_pages,
     pick_title,
 )
 from make_sample_pdfs import make_all  # noqa: E402
-from textnorm import normalize_text  # noqa: E402
+from textnorm import load_char_fixes, normalize_text  # noqa: E402
 
 
 @pytest.fixture(scope="module")
@@ -156,3 +158,54 @@ def test_unlabeled_table_dropped_when_retry_fails(pdfs, monkeypatch):
     stats: dict[str, int] = {}
     assert extract(pdfs["good"], [4], stats) == []
     assert stats["no_labels"] == 1
+
+
+# --- 依檔名的錯字替換 ---
+
+
+def test_char_fixes_applied_only_to_listed_pdf(tmp_path):
+    path = tmp_path / "char_fixes.json"
+    path.write_text('{"2412_2025.pdf": {"倝": "新"}}', encoding="utf-8")
+    fixes = load_char_fixes("2412_2025.pdf", path)
+    assert normalize_text("單位：倝台幣仟元", fixes) == "單位:新台幣仟元"
+    assert load_char_fixes("2330_2025.pdf", path) == {}
+
+
+def test_char_fixes_missing_file_is_empty(tmp_path):
+    assert load_char_fixes("x.pdf", tmp_path / "nope.json") == {}
+
+
+def test_char_fixes_rejects_multi_char_source(tmp_path):
+    path = tmp_path / "char_fixes.json"
+    path.write_text('{"a.pdf": {"倝台": "新台"}}', encoding="utf-8")
+    with pytest.raises(ValueError):
+        load_char_fixes("a.pdf", path)
+
+
+def test_char_fixes_used_by_table_extraction(pdfs):
+    tables = extract(pdfs["good"], [4], char_fixes=str.maketrans({"淨": "凈"}))
+    assert "| 本期凈利 |" in tables[0]["markdown"]
+
+
+# --- 表名排除與續表 ---
+
+
+def test_excluded_title_words():
+    assert is_excluded_title("2. 永續相關風險與機會之財務影響")
+    assert is_excluded_title("1. 公司治理與道德規範")
+    assert not is_excluded_title("最近二年度合併財務狀況比較分析表")
+
+
+def test_continued_title_not_doubled():
+    assert continued_title("合併財務狀況比較分析表") == "合併財務狀況比較分析表（續）"
+    assert continued_title("合併財務狀況比較分析表（續）") == "合併財務狀況比較分析表（續）"
+
+
+def test_continued_table_and_excluded_title(pdfs):
+    stats: dict[str, int] = {}
+    tables = extract(pdfs["continued"], [0, 1, 2], stats)
+    assert [(t["page"], t["title"]) for t in tables] == [
+        (1, "合併財務狀況比較分析表"),
+        (2, "合併財務狀況比較分析表（續）"),
+    ]
+    assert stats["excluded_title"] == 1
