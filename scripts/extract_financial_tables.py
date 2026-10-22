@@ -35,8 +35,9 @@ from pathlib import Path
 import pdfplumber
 import pymupdf
 
-sys.path.insert(0, str(Path(__file__).parent))
-from textnorm import load_char_fixes, normalize_text  # noqa: E402
+# 讓 scripts/ 直接執行時也找得到 common/ 套件
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from common.textnorm import load_char_fixes, normalize_text  # noqa: E402
 
 DEFAULT_KEYWORDS = [
     "財務概況",

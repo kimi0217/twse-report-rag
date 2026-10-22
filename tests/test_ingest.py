@@ -7,11 +7,12 @@ import pymupdf
 import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "scripts"))
 
 import ingest  # noqa: E402
-from embeddings import CachedEmbedder  # noqa: E402
-from textnorm import normalize_text  # noqa: E402
+from common.embeddings import CachedEmbedder  # noqa: E402
+from common.textnorm import normalize_text  # noqa: E402
 from ingest import (  # noqa: E402
     MAX_CHUNK,
     MIN_CHUNK,

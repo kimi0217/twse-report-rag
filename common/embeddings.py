@@ -1,9 +1,9 @@
 """Embedding 介面：業務邏輯只認 `Embedder.embed()`，換供應商或模型改環境變數就好。
 
 環境變數：
-    EMBEDDING_PROVIDER  目前只有 ollama
-    EMBEDDING_MODEL     預設 bge-m3
-    OLLAMA_URL          預設 http://localhost:11434
+    EMBED_PROVIDER  目前只有 ollama
+    EMBED_MODEL     預設 bge-m3
+    OLLAMA_BASE_URL 預設 http://localhost:11434
 
 `CachedEmbedder` 依「模型 + 文字」的 hash 快取到 jsonl：
 ingestion 重跑時內容沒變的 chunk 不用重算，本機 CPU 跑 bge-m3 一份年報要好幾分鐘。
@@ -28,6 +28,12 @@ class Embedder(Protocol):
     def embed(self, texts: list[str]) -> list[list[float]]: ...
 
 
+class AsyncEmbedder(Protocol):
+    model: str
+
+    async def embed(self, texts: list[str]) -> list[list[float]]: ...
+
+
 class OllamaEmbedder:
     def __init__(self, model: str, base_url: str, timeout: float = 300.0) -> None:
         self.model = model
@@ -39,12 +45,42 @@ class OllamaEmbedder:
         return resp.json()["embeddings"]
 
 
+class AsyncOllamaEmbedder:
+    """後端用：FastAPI 是 async，同步呼叫 Ollama 會卡住整個 event loop。"""
+
+    def __init__(self, model: str, base_url: str, timeout: float = 60.0) -> None:
+        self.model = model
+        self._client = httpx.AsyncClient(base_url=base_url, timeout=timeout)
+
+    async def embed(self, texts: list[str]) -> list[list[float]]:
+        resp = await self._client.post("/api/embed", json={"model": self.model, "input": texts})
+        resp.raise_for_status()
+        return resp.json()["embeddings"]
+
+    async def aclose(self) -> None:
+        await self._client.aclose()
+
+
+def _settings() -> tuple[str, str, str]:
+    return (
+        os.environ.get("EMBED_PROVIDER", "ollama"),
+        os.environ.get("EMBED_MODEL", "bge-m3"),
+        os.environ.get("OLLAMA_BASE_URL", "http://localhost:11434"),
+    )
+
+
 def get_embedder() -> Embedder:
-    provider = os.environ.get("EMBEDDING_PROVIDER", "ollama")
-    model = os.environ.get("EMBEDDING_MODEL", "bge-m3")
+    provider, model, url = _settings()
     if provider == "ollama":
-        return OllamaEmbedder(model, os.environ.get("OLLAMA_URL", "http://localhost:11434"))
-    raise ValueError(f"不支援的 EMBEDDING_PROVIDER：{provider}")
+        return OllamaEmbedder(model, url)
+    raise ValueError(f"不支援的 EMBED_PROVIDER：{provider}")
+
+
+def get_async_embedder() -> AsyncOllamaEmbedder:
+    provider, model, url = _settings()
+    if provider == "ollama":
+        return AsyncOllamaEmbedder(model, url)
+    raise ValueError(f"不支援的 EMBED_PROVIDER：{provider}")
 
 
 def cache_key(model: str, text: str) -> str:

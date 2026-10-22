@@ -31,8 +31,9 @@ from pathlib import Path
 
 import pymupdf
 
-sys.path.insert(0, str(Path(__file__).parent))
-from textnorm import normalize_text  # noqa: E402
+# 讓 scripts/ 直接執行時也找得到 common/ 套件
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from common.textnorm import normalize_text  # noqa: E402
 
 KEYWORDS = ["公司", "股東", "董事", "營業", "財務", "年度", "會計", "報告"]
 

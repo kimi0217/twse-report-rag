@@ -6,12 +6,12 @@
 
 ## 目前進度
 
-- [x] PDF 前置檢查：`scripts/check_pdf_text.py`、`scripts/extract_financial_tables.py`、`scripts/textnorm.py`（說明見 `docs/pdf-preflight.md`）
+- [x] PDF 前置檢查：`scripts/check_pdf_text.py`、`scripts/extract_financial_tables.py`、`common/textnorm.py`（說明見 `docs/pdf-preflight.md`）
 - [x] 年報資料：2308、2317、2330、2382、2454 的 2025 年報；財務表格抽取品質修正（PyMuPDF 重抽、內容篩選、表名、續表、錯字表）
 - [x] 2412 中華電淘汰（內文約 17% 字被字型換成罕見字），原檔留在 `data/rejected/`，改用 2382 廣達；`check_pdf_text.py` 新增罕見字比例指標
-- [x] ingestion（內文）：`scripts/ingest.py`、`scripts/embeddings.py`；5 家共 1,798 個 text chunk，bge-m3 (1024 維)、HNSW cosine
+- [x] ingestion（內文）：`scripts/ingest.py`、`common/embeddings.py`；5 家約 1,780 個 text chunk（表格範圍內的內文已去重），bge-m3 (1024 維)、HNSW cosine
 - [x] ingestion（表格）：`data/tables/*.jsonl` → kind='table' chunk，一張表一個 chunk，共 15 張（最大約 700 token）
-- [ ] 後端 API：FastAPI，`/companies`、`/ask`（SSE 串流）
+- [x] 後端 API：FastAPI，`/health`、`/companies`、`/ask`（SSE 串流）；`backend/app/`
 - [ ] 前端：React 聊天頁 + 引用卡片
 - [ ] 評估：`eval/` 問題集 + hit@k
 - [ ] Docker 化（docker compose 一鍵啟動）、GitHub Actions、README（含 demo GIF）
@@ -42,8 +42,9 @@ data/pdfs/            年報 PDF（不進 git），檔名格式：<股票代號>
 data/tables/          extract_financial_tables.py 的輸出（.md 給人看、.jsonl 給 ingestion），不進 git
 data/char_fixes.json  依 PDF 檔名設定的錯字替換表（進 git）
 data/rejected/        前置檢查 FAIL 的年報，留作 README 的證據（不進 git，ingestion 不讀）
-scripts/              離線資料處理（textnorm、檢查、表格抽取、ingest.py、embeddings.py）
-config/companies.json 股票代號 → 公司名稱對照（新增公司要加在這裡）
+common/               scripts/ 與 backend/ 共用：textnorm、embeddings、companies
+scripts/              離線資料處理（檢查、表格抽取、ingest.py）
+config/companies.json 股票代號 → 公司名稱與別名（新增公司要加在這裡；別名用來從問題認出公司）
 data/embeddings_cache.jsonl  embedding 快取（依「模型 + 文字」hash），不進 git
 backend/              FastAPI 服務
 frontend/             React + Vite + TypeScript + Tailwind
@@ -72,7 +73,7 @@ chunks(
 
 - 內文 chunk：依段落切，約 300～500 字，相鄰 chunk 重疊約 50 字；不要跨頁，才能保證頁碼正確。
 - 表格 chunk：直接讀 `data/tables/*.jsonl`，**一張表一個 chunk，不可再切**；content 開頭放表名（含單位）。
-- ingestion 時，內文頁若已被抽成表格，內文版本仍保留（之後評估再決定要不要去重）。
+- ingestion 時，表格 bbox 範圍內的內文跳過（避免攤平的數字跟表格重複）；表格外的說明文字保留。未抽成表格的非財務表仍會攤平留在內文，見 `docs/known-issues.md`。
 
 ## API
 
@@ -80,16 +81,16 @@ chunks(
 - `GET /companies` → `[{ticker, company, years: [..]}]`
 - `POST /ask` body `{question, tickers?: string[], year?: int}` → SSE 串流
   - `event: token` 逐段文字
-  - `event: sources` 最後送出 `[{ticker, company, year, page, kind, title, snippet}]`
+  - `event: sources` 最後送出 `[{index, ticker, company, year, page, kind, title, snippet}]`（index 對應回答裡的 [n]）
   - `event: error` 發生錯誤時
 
 ## 開發規則
 
-- **所有從 PDF 來的文字都要經過 `scripts/textnorm.normalize_text()`**，使用者的問題在檢索前也要。
+- **所有從 PDF 來的文字都要經過 `common/textnorm.normalize_text()`**，使用者的問題在檢索前也要。
 - **PDF 文字一律套用 `data/char_fixes.json`**：用 `load_char_fixes(pdf檔名)` 取得對照表，傳給 `normalize_text(text, char_fixes)`。這是字型把字對應錯（例如中華電「新」→「倝」），NFKC 修不好，只能依檔名人工維護；只能一字換一字。發現新錯字就加進這個檔，再重跑表格抽取與 ingestion。使用者的問題不套用。
 - 表格 chunk 規則（`extract_financial_tables.py` 已實作）：項目欄須含財務項目；表名含「治理」「道德」「永續」「氣候」者排除；不收文字對齊（text-fallback）表格；頁首無表名的表沿用上一頁表名加「（續）」；jsonl 的 `tool` 記錄抽取工具（`pdfplumber` / `pymupdf`）。
 - **不使用 LangChain / LlamaIndex**：chunking、檢索、prompt 組裝自己寫，這是面試要講解的核心。
-- 檢索結果不足或相關性太低時，回答「年報中查無相關資料」，不可臆測。prompt 要求模型只根據提供的段落回答，並標註引用編號。
+- 檢索結果不足或相關性太低時，回答「年報中查無相關資料」，不可臆測。程式層：最相近 chunk 距離超過 `NO_ANSWER_DISTANCE` 就不呼叫 LLM；問題提到已知公司（含別名）時自動只檢索該公司。prompt 要求模型只根據提供的段落回答，並標註引用編號。
 - 所有設定走環境變數，維護 `.env.example`；**不 commit 任何 key 或 `.env`**。
 - 後端用 async；request/response 一律用 Pydantic model。
 - 註解與 docstring 用繁體中文，說明「為什麼」而不是「做什麼」；變數與函式名稱用英文。
@@ -116,4 +117,11 @@ python scripts/ingest.py data/pdfs/          # 需要 pgvector 容器與 Ollama 
 python -m pytest -q                          # 資料庫整合測試用 TEST_DATABASE_URL（twse_test），連不上會跳過
 ```
 
-（後端、前端、docker-compose 完成後把指令補在這裡。）
+後端（在專案根目錄）：
+
+```bash
+pip install -r backend/requirements.txt
+uvicorn backend.app.main:app --port 8000
+```
+
+（前端、docker-compose 完成後把指令補在這裡。）

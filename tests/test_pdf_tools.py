@@ -4,6 +4,7 @@ from pathlib import Path
 import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "scripts"))
 sys.path.insert(0, str(ROOT / "tests"))
 
@@ -22,7 +23,7 @@ from extract_financial_tables import (  # noqa: E402
     pick_title,
 )
 from make_sample_pdfs import make_all  # noqa: E402
-from textnorm import load_char_fixes, normalize_text  # noqa: E402
+from common.textnorm import load_char_fixes, normalize_text  # noqa: E402
 
 
 @pytest.fixture(scope="module")

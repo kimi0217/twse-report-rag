@@ -40,12 +40,14 @@ import psycopg
 import pymupdf
 from pgvector.psycopg import register_vector
 
-sys.path.insert(0, str(Path(__file__).parent))
-from embeddings import CachedEmbedder, Embedder, get_embedder  # noqa: E402
-from textnorm import load_char_fixes, normalize_text  # noqa: E402
+# 讓 scripts/ 直接執行時也找得到 common/ 套件
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from common.companies import DEFAULT_COMPANIES  # noqa: E402
+from common.companies import load_companies as load_company_config  # noqa: E402
+from common.embeddings import CachedEmbedder, Embedder, get_embedder  # noqa: E402
+from common.textnorm import load_char_fixes, normalize_text  # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[1]
-DEFAULT_COMPANIES = ROOT / "config" / "companies.json"
 DEFAULT_CACHE = ROOT / "data" / "embeddings_cache.jsonl"
 DEFAULT_TABLES = ROOT / "data" / "tables"
 DEFAULT_DB = "postgresql://twse:twse@localhost:5432/twse"
@@ -116,7 +118,8 @@ def parse_filename(path: Path) -> tuple[str, int]:
 
 
 def load_companies(path: Path = DEFAULT_COMPANIES) -> dict[str, str]:
-    return json.loads(path.read_text(encoding="utf-8"))
+    """ingestion 只需要正式名稱（存進 company 欄位、embedding 前綴）；別名是給線上檢索認公司用的。"""
+    return {t: c.name for t, c in load_company_config(path).items()}
 
 
 def page_regions(page: pymupdf.Page) -> list[pymupdf.Rect]:
@@ -270,7 +273,7 @@ def ensure_schema(conn: psycopg.Connection, dim: int) -> None:
         "SELECT atttypmod FROM pg_attribute WHERE attrelid = 'chunks'::regclass AND attname = 'embedding'"
     ).fetchone()[0]
     if existing != dim:
-        raise RuntimeError(f"chunks.embedding 是 vector({existing})，但 EMBEDDING_DIM={dim}；換模型要先重建資料表")
+        raise RuntimeError(f"chunks.embedding 是 vector({existing})，但 EMBED_DIM={dim}；換模型要先重建資料表")
     conn.commit()
 
 
@@ -356,7 +359,7 @@ def main() -> int:
         files += sorted(p.glob("*.pdf")) if p.is_dir() else [p]
     companies = load_companies()
     embedder = CachedEmbedder(get_embedder(), args.cache)
-    dim = int(os.environ.get("EMBEDDING_DIM", "1024"))
+    dim = int(os.environ.get("EMBED_DIM", "1024"))
 
     start = time.perf_counter()
     with connect() as conn:
