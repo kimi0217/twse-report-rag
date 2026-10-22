@@ -8,6 +8,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 from collections.abc import AsyncIterator
@@ -18,8 +19,8 @@ from fastapi import FastAPI, Request
 from fastapi.responses import StreamingResponse
 
 from backend.app.convert import StreamConverter
-from backend.app.llm import LLM, OllamaChat
-from backend.app.prompt import NO_ANSWER, build_messages, order_context
+from backend.app.llm import LLM, OllamaChat, OutputLimitReached
+from backend.app.prompt import NO_ANSWER, TRUNCATED_NOTE, build_messages
 from backend.app.retrieval import PgRetriever, RetrievedChunk, Retriever
 from backend.app.schemas import AskRequest, CompanyOut, Health, Source
 from backend.app.settings import Settings
@@ -54,6 +55,13 @@ def to_sources(chunks: list[RetrievedChunk], snippet_chars: int) -> list[Source]
     ]
 
 
+def no_answer_threshold(settings: Settings, question: str, companies: dict[str, Company]) -> float:
+    """問題文字裡提到已知公司（含別名）才放寬；前端勾選的公司篩選不算，那不代表問題本身跟年報有關。"""
+    if find_tickers(question, companies):
+        return settings.no_answer_distance_with_company
+    return settings.no_answer_distance
+
+
 def resolve_tickers(req: AskRequest, question: str, companies: dict[str, Company]) -> list[str] | None:
     """使用者沒指定公司時，用問題裡的公司名稱／別名自動篩選，避免拿別家公司的段落回答。"""
     if req.tickers:
@@ -63,27 +71,43 @@ def resolve_tickers(req: AskRequest, question: str, companies: dict[str, Company
 
 async def answer_events(req: AskRequest, deps: Deps) -> AsyncIterator[str]:
     s = deps.settings
+    # 整個 /ask 共用一個截止時間：檢索階段逾時回 error；回答生成中逾時就截斷收尾，照常送出 sources
+    deadline = asyncio.get_running_loop().time() + s.ask_timeout_seconds
     try:
         question = normalize_text(req.question)
         tickers = resolve_tickers(req, question, deps.companies)
-        [vector] = await deps.embedder.embed([question])
-        chunks = await deps.retriever.search(vector, tickers, req.year, s.top_k)
+        async with asyncio.timeout_at(deadline):
+            [vector] = await deps.embedder.embed([question])
+            chunks = await deps.retriever.search(vector, tickers, req.year, s.top_k)
 
         # 程式層的查無資料：最相近的段落都不夠近，就不讓 LLM 有機會拿不相關的段落硬湊答案
-        if not chunks or min(c.distance for c in chunks) > s.no_answer_distance:
+        threshold = no_answer_threshold(s, question, deps.companies)
+        if not chunks or min(c.distance for c in chunks) > threshold:
             log.info("no answer: tickers=%s best=%s", tickers, chunks and min(c.distance for c in chunks))
             yield sse("token", {"text": NO_ANSWER})
             yield sse("sources", [])
             return
 
-        ordered = order_context(chunks)
+        # context 依向量距離排序：評估發現表格優先時，答案所在的內文被擠到後面，小模型就回答查無資料
         conv = StreamConverter()
-        async for piece in deps.llm.stream(build_messages(question, ordered)):
-            if text := conv.feed(piece):
-                yield sse("token", {"text": text})
+        truncated = False
+        try:
+            async with asyncio.timeout_at(deadline):
+                async for piece in deps.llm.stream(build_messages(question, chunks)):
+                    if text := conv.feed(piece):
+                        yield sse("token", {"text": text})
+        except (OutputLimitReached, TimeoutError):
+            # 小模型偶爾重複輸出停不下來：保留已輸出的部分並標明截斷，比讓前端一直轉圈好
+            truncated = True
         if text := conv.flush():
             yield sse("token", {"text": text})
-        yield sse("sources", [src.model_dump() for src in to_sources(ordered, s.snippet_chars)])
+        if truncated:
+            log.warning("answer truncated: %s", req.question)
+            yield sse("token", {"text": TRUNCATED_NOTE})
+        yield sse("sources", [src.model_dump() for src in to_sources(chunks, s.snippet_chars)])
+    except TimeoutError:
+        log.warning("retrieval timeout: %s", req.question)
+        yield sse("error", {"message": f"回答逾時（超過 {s.ask_timeout_seconds:g} 秒）"})
     except Exception as exc:  # 串流已經開始，HTTP 狀態碼改不了，只能用 error 事件通知前端
         log.exception("ask failed")
         yield sse("error", {"message": f"{type(exc).__name__}: {exc}"})
@@ -102,7 +126,7 @@ def create_app(deps: Deps | None = None) -> FastAPI:
         retriever = PgRetriever(settings.database_url)
         await retriever.open()
         embedder = get_async_embedder()
-        llm = OllamaChat(settings.llm_model, settings.ollama_url, settings.llm_temperature)
+        llm = OllamaChat(settings.llm_model, settings.ollama_url, settings.llm_temperature, settings.llm_max_tokens)
         app.state.deps = Deps(settings, embedder, retriever, llm, load_companies())
         try:
             yield

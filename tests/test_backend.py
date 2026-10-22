@@ -1,5 +1,7 @@
 import asyncio
 import json
+
+import httpx
 import os
 import sys
 from pathlib import Path
@@ -12,8 +14,9 @@ sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "scripts"))
 
 from backend.app.convert import StreamConverter, to_traditional  # noqa: E402
-from backend.app.main import Deps, create_app  # noqa: E402
-from backend.app.prompt import NO_ANSWER, SYSTEM_PROMPT, build_messages, order_context  # noqa: E402
+from backend.app.main import Deps, create_app, no_answer_threshold  # noqa: E402
+from backend.app.llm import OllamaChat, OutputLimitReached  # noqa: E402
+from backend.app.prompt import NO_ANSWER, SYSTEM_PROMPT, TRUNCATED_NOTE, build_messages  # noqa: E402
 from backend.app.retrieval import PgRetriever, RetrievedChunk  # noqa: E402
 from backend.app.settings import Settings  # noqa: E402
 from common.companies import Company, find_tickers, load_companies  # noqa: E402
@@ -114,10 +117,11 @@ def test_ask_streams_tokens_then_sources():
     answer = "".join(d["text"] for e, d in events if e == "token")
     assert answer == "台積電合併營業收入為 3,809,054,272 新台幣仟元 [1]。"  # 簡轉繁，「台」不變「臺」
     sources = events[-1][1]
-    # 表格排第一，編號跟 context 的 [1][2] 一致
-    assert [(s["index"], s["kind"], s["page"]) for s in sources] == [(1, "table", 65), (2, "text", 7)]
-    assert sources[1]["content"] == "內文段落"  # 完整內容給前端展開卡片
-    assert deps.llm.messages[1]["content"].index("[1] 台積電 2025 p65（表格）") < deps.llm.messages[1]["content"].index("[2]")
+    # 依距離排序（不再表格優先），編號跟 context 的 [1][2] 一致
+    assert [(s["index"], s["kind"], s["page"]) for s in sources] == [(1, "text", 7), (2, "table", 65)]
+    assert sources[0]["content"] == "內文段落"  # 完整內容給前端展開卡片
+    context = deps.llm.messages[1]["content"]
+    assert context.index("[1] 台積電 2025 p7（內文）") < context.index("[2] 台積電 2025 p65（表格）")
 
 
 def test_far_chunks_answer_without_calling_llm():
@@ -180,10 +184,10 @@ def test_empty_question_rejected():
 # --- prompt 與 context ---
 
 
-def test_order_context_puts_tables_first_keeping_distance_order():
-    chunks = [_chunk("text", 0.1, page=1), _chunk("table", 0.3, page=2), _chunk("text", 0.2, page=3),
-              _chunk("table", 0.4, page=4)]
-    assert [c.page for c in order_context(chunks)] == [2, 4, 1, 3]
+def test_context_keeps_retrieval_order():
+    chunks = [_chunk("text", 0.1, page=1), _chunk("table", 0.3, page=2), _chunk("text", 0.2, page=3)]
+    content = build_messages("營收？", chunks)[1]["content"]
+    assert content.index("p1（內文）") < content.index("p2（表格）") < content.index("p3（內文）")
 
 
 def test_prompt_rules_and_context_labels():
@@ -279,3 +283,117 @@ def test_table_unit_surfaced_in_context():
     messages = build_messages("營收？", [_chunk("table", title="合併 台積公司及子公司財務報表（單位:新台幣仟元）")])
     assert "（表格）｜合併 台積公司及子公司財務報表（單位:新台幣仟元）\n金額單位：新台幣仟元\n" in messages[1]["content"]
     assert "金額單位" not in build_messages("營收？", [_chunk("text")])[1]["content"]
+
+
+# --- 拒答門檻依問題是否提到已知公司 ---
+
+
+def test_threshold_loosened_only_when_question_names_company():
+    s = Settings(no_answer_distance=0.33, no_answer_distance_with_company=0.5)
+    assert no_answer_threshold(s, "TSMC 去年稅後淨利？", COMPANIES) == 0.5
+    assert no_answer_threshold(s, "大立光的毛利率？", COMPANIES) == 0.33
+
+
+def test_named_company_answers_at_mid_distance():
+    llm = FakeLLM()
+    settings = Settings(no_answer_distance=0.33, no_answer_distance_with_company=0.5)
+    client, _ = _client([_chunk(distance=0.42)], llm=llm, settings=settings)
+    with client:
+        events = _events(client.post("/ask", json={"question": "台積電 2 奈米量產了嗎？"}))
+    assert llm.messages is not None and events[-1][0] == "sources"
+
+
+def test_ui_ticker_filter_does_not_loosen_threshold():
+    # 前端勾選公司不代表問題跟年報有關：「秋天的詩」即使只勾台積電也要拒答
+    llm = FakeLLM()
+    settings = Settings(no_answer_distance=0.33, no_answer_distance_with_company=0.5)
+    client, _ = _client([_chunk(distance=0.42)], llm=llm, settings=settings)
+    with client:
+        events = _events(client.post("/ask", json={"question": "寫一首秋天的詩", "tickers": ["2330"]}))
+    assert events == [("token", {"text": NO_ANSWER}), ("sources", [])]
+    assert llm.messages is None
+
+
+# --- 輸出上限與整體逾時 ---
+
+
+class LimitedLLM(FakeLLM):
+    """模擬 Ollama 回報 done_reason=length：先輸出一段，再丟出 OutputLimitReached。"""
+
+    async def stream(self, messages):
+        self.messages = messages
+        yield "董事長是蔡明介，蔡明介，蔡明介"
+        raise OutputLimitReached()
+
+
+class EndlessLLM(FakeLLM):
+    """模擬停不下來的生成：一直輸出，直到被整體逾時中止。"""
+
+    async def stream(self, messages):
+        self.messages = messages
+        while True:
+            yield "重複，"
+            await asyncio.sleep(0.01)
+
+
+class SlowEmbedder(FakeEmbedder):
+    async def embed(self, texts):
+        await asyncio.sleep(5)
+        return await super().embed(texts)
+
+
+def test_output_limit_appends_truncation_note_and_keeps_sources():
+    client, _ = _client([_chunk()], llm=LimitedLLM())
+    with client:
+        events = _events(client.post("/ask", json={"question": "聯發科董事長？"}))
+    tokens = [d["text"] for e, d in events if e == "token"]
+    assert tokens[-1] == TRUNCATED_NOTE and "蔡明介" in "".join(tokens)
+    assert events[-1][0] == "sources" and len(events[-1][1]) == 1
+
+
+def test_endless_generation_stopped_by_total_timeout():
+    client, _ = _client([_chunk()], llm=EndlessLLM(), settings=Settings(ask_timeout_seconds=0.3))
+    with client:
+        events = _events(client.post("/ask", json={"question": "聯發科董事長？"}))
+    tokens = [d["text"] for e, d in events if e == "token"]
+    assert tokens[-1] == TRUNCATED_NOTE and len(tokens) > 1
+    assert events[-1][0] == "sources"
+
+
+def test_timeout_before_answer_sends_error():
+    deps = Deps(Settings(ask_timeout_seconds=0.2), SlowEmbedder(), FakeRetriever([_chunk()]), FakeLLM(), COMPANIES)
+    with TestClient(create_app(deps)) as client:
+        events = _events(client.post("/ask", json={"question": "台積電營收"}))
+    assert events == [("error", {"message": "回答逾時（超過 0.2 秒）"})]
+
+
+def _ollama_chat_with(lines, seen_bodies):
+    def handler(request):
+        seen_bodies.append(json.loads(request.content))
+        return httpx.Response(200, content="\n".join(json.dumps(x) for x in lines).encode())
+
+    llm = OllamaChat("qwen", "http://ollama", 0.1, max_tokens=64)
+    llm._client = httpx.AsyncClient(base_url="http://ollama", transport=httpx.MockTransport(handler))
+    return llm
+
+
+async def _collect(llm):
+    out = []
+    try:
+        async for t in llm.stream([{"role": "user", "content": "hi"}]):
+            out.append(t)
+    except OutputLimitReached:
+        out.append("<limit>")
+    return out
+
+
+def test_ollama_chat_sends_num_predict_and_detects_length_stop():
+    bodies = []
+    lines = [{"message": {"content": "甲"}, "done": False}, {"message": {"content": "乙"}, "done": True, "done_reason": "length"}]
+    assert asyncio.run(_collect(_ollama_chat_with(lines, bodies))) == ["甲", "乙", "<limit>"]
+    assert bodies[0]["options"]["num_predict"] == 64 and bodies[0]["think"] is False
+
+
+def test_ollama_chat_normal_stop_not_truncated():
+    lines = [{"message": {"content": "甲"}, "done": True, "done_reason": "stop"}]
+    assert asyncio.run(_collect(_ollama_chat_with(lines, []))) == ["甲"]

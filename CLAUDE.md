@@ -13,7 +13,7 @@
 - [x] ingestion（表格）：`data/tables/*.jsonl` → kind='table' chunk，一張表一個 chunk，共 15 張（最大約 700 token）
 - [x] 後端 API：FastAPI，`/health`、`/companies`、`/ask`（SSE 串流）；`backend/app/`
 - [x] 前端：React 聊天頁 + 引用卡片（`frontend/`，Vite + TypeScript + Tailwind v4；Vitest 測 SSE 解析與引用拆解）
-- [ ] 評估：`eval/` 問題集（26 題）+ `run_eval.py`；baseline 已跑（hit@3 91%、回答正確率 69%），待做一項改進並比較
+- [x] 評估：主題組 26 題 + held-out 6 題；`run_eval.py`。改進：拒答門檻依公司、context 依距離排序、輸出上限與逾時。回答正確率 69% → 88%（主題組），held-out 人工複核 3/6，見 `eval/results.md`
 - [ ] Docker 化（docker compose 一鍵啟動）、GitHub Actions、README（含 demo GIF）
 
 完成一項就把這裡打勾。

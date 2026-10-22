@@ -9,6 +9,7 @@ from backend.app.retrieval import RetrievedChunk
 UNIT = re.compile(r"單位\s*[:：]\s*([^）)\s]+)")
 
 NO_ANSWER = "年報中查無相關資料"
+TRUNCATED_NOTE = "（回答過長，已截斷）"
 
 SYSTEM_PROMPT = f"""你是台灣上市公司年報問答助理。請嚴格遵守：
 1. 只能根據使用者提供的「年報段落」回答，不可使用段落以外的知識，也不可推測。
@@ -17,11 +18,6 @@ SYSTEM_PROMPT = f"""你是台灣上市公司年報問答助理。請嚴格遵守
 3. 句子後面用 [編號] 標註依據的段落，例如 [1]。
 4. 段落裡沒有答案，或段落講的不是問題問的公司，只回答「{NO_ANSWER}」，不要多寫。
 5. 用繁體中文回答，簡潔直接。"""
-
-
-def order_context(chunks: list[RetrievedChunk]) -> list[RetrievedChunk]:
-    """表格排最前面：小模型偏重前面的段落，數字題要先看到表格，而不是攤平的內文數字。各組內維持距離順序。"""
-    return [c for c in chunks if c.kind == "table"] + [c for c in chunks if c.kind != "table"]
 
 
 def format_context(chunks: list[RetrievedChunk]) -> str:

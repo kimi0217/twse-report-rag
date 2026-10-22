@@ -9,14 +9,21 @@ from typing import Protocol
 import httpx
 
 
+class OutputLimitReached(Exception):
+    """模型輸出達到 max_tokens 被截斷；已經輸出的文字照常保留，由呼叫端決定怎麼收尾。"""
+
+
 class LLM(Protocol):
     def stream(self, messages: list[dict[str, str]]) -> AsyncIterator[str]: ...
 
 
 class OllamaChat:
-    def __init__(self, model: str, base_url: str, temperature: float, timeout: float = 120.0) -> None:
+    def __init__(
+        self, model: str, base_url: str, temperature: float, max_tokens: int = 1024, timeout: float = 120.0
+    ) -> None:
         self.model = model
         self.temperature = temperature
+        self.max_tokens = max_tokens
         self._client = httpx.AsyncClient(base_url=base_url, timeout=timeout)
 
     async def stream(self, messages: list[dict[str, str]]) -> AsyncIterator[str]:
@@ -26,7 +33,8 @@ class OllamaChat:
             "stream": True,
             # qwen3.5 預設會先輸出思考過程：實測一題 150 秒、關掉 7 秒，串流問答一定要關
             "think": False,
-            "options": {"temperature": self.temperature},
+            # num_predict 限制輸出 token 數；httpx 的 timeout 是單次讀取逾時，串流不斷時擋不住無限生成
+            "options": {"temperature": self.temperature, "num_predict": self.max_tokens},
         }
         async with self._client.stream("POST", "/api/chat", json=body) as resp:
             resp.raise_for_status()
@@ -38,6 +46,8 @@ class OllamaChat:
                     raise RuntimeError(data["error"])
                 if text := data.get("message", {}).get("content"):
                     yield text
+                if data.get("done") and data.get("done_reason") == "length":
+                    raise OutputLimitReached()
 
     async def aclose(self) -> None:
         await self._client.aclose()

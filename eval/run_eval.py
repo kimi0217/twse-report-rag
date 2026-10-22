@@ -3,6 +3,8 @@
 用法（在專案根目錄，需要 pgvector 容器與 Ollama）：
     python eval/run_eval.py --label baseline              # 只評估檢索與程式層拒答
     python eval/run_eval.py --label baseline --with-llm   # 再加上 LLM 回答正確率（較慢）
+    python eval/run_eval.py --label heldout --with-llm --questions eval/questions_heldout.jsonl  # 最後驗收用
+    python eval/run_eval.py --rescore   # 判分規則修正後，用已存的回答重新判分（不重跑 LLM）
 
 評估走的是跟 /ask 完全相同的程式：normalize_text → 別名認公司 → bge-m3 → PgRetriever 前 k 名，
 --with-llm 時直接呼叫後端的 answer_events()，所以量到的就是線上行為。
@@ -26,8 +28,8 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
 from backend.app.llm import OllamaChat  # noqa: E402
-from backend.app.main import Deps, answer_events, resolve_tickers  # noqa: E402
-from backend.app.prompt import NO_ANSWER  # noqa: E402
+from backend.app.main import Deps, answer_events, no_answer_threshold, resolve_tickers  # noqa: E402
+from backend.app.prompt import NO_ANSWER, TRUNCATED_NOTE  # noqa: E402
 from backend.app.retrieval import PgRetriever  # noqa: E402
 from backend.app.schemas import AskRequest  # noqa: E402
 from backend.app.settings import Settings  # noqa: E402
@@ -39,6 +41,13 @@ QUESTIONS = ROOT / "eval" / "questions.jsonl"
 RESULTS_JSON = ROOT / "eval" / "results.json"
 RESULTS_MD = ROOT / "eval" / "results.md"
 KS = (1, 3, 8)
+# held-out 題組的 label 以這個開頭，報告裡另外列，不放進逐步改進表
+HELDOUT_PREFIX = "heldout"
+
+
+def is_refusal(qtype: str) -> bool:
+    # refusal：資料庫外的公司或無關問題；refusal_known：提到已知公司，但年報裡沒有答案
+    return qtype.startswith("refusal")
 
 
 @dataclass
@@ -64,6 +73,7 @@ class QuestionResult:
     hit_rank: int | None
     answer: str | None = None
     answer_correct: bool | None = None
+    truncated: bool | None = None  # 回答達到輸出上限或 /ask 整體逾時，被截斷
     refused_by_answer: bool | None = None
     latency: float | None = None
     error: str | None = None
@@ -86,8 +96,13 @@ def hit_rank(top: list[Retrieved], expected: dict[str, list[int]]) -> int | None
 
 
 def _squash(text: str) -> str:
-    # 「3,809,054,272 仟元」「3809054272仟元」視為相同；只拿掉逗號與空白，不做單位換算
-    return re.sub(r"[,\s]", "", normalize_text(text))
+    """只做格式上的對齊，不做單位換算：
+    - 「3,809,054,272 仟元」「3809054272仟元」視為相同（逗號、空白）
+    - 模型常輸出 markdown 粗體「**19.45** 元」
+    - 幣別可能夾在數字與單位中間：「7,933,023,878 新台幣仟元」、「$421,147,557」
+    """
+    text = normalize_text(text).replace("**", "")
+    return re.sub(r"[,\s$]|新台幣|NT", "", text)
 
 
 def check_answer(answer: str, check: dict) -> bool:
@@ -106,13 +121,28 @@ def check_answer(answer: str, check: dict) -> bool:
 # --- 執行 ---
 
 
-async def evaluate(questions: list[dict], with_llm: bool) -> tuple[list[QuestionResult], Settings]:
+async def _ask(req: AskRequest, deps: Deps) -> tuple[str, str | None]:
+    tokens, error = [], None
+    async for event in answer_events(req, deps):
+        name, data = _parse_sse(event)
+        if name == "token":
+            tokens.append(data["text"])
+        elif name == "error":
+            error = data["message"]
+    return "".join(tokens), error
+
+
+async def evaluate(questions: list[dict], with_llm: bool, on_result=None) -> tuple[list[QuestionResult], Settings]:
+    """on_result(results, settings) 每題跑完就呼叫一次：中途卡住或中斷時，已完成的題目不會遺失。"""
     settings = Settings.from_env()
     companies = load_companies()
     embedder = get_async_embedder()
     retriever = PgRetriever(settings.database_url)
     await retriever.open()
-    llm = OllamaChat(settings.llm_model, settings.ollama_url, settings.llm_temperature) if with_llm else None
+    llm = (OllamaChat(settings.llm_model, settings.ollama_url, settings.llm_temperature, settings.llm_max_tokens)
+           if with_llm else None)
+    # /ask 本身已有整體逾時；這裡再留 30 秒當保險，萬一還是卡住就記為失敗、繼續下一題
+    question_timeout = settings.ask_timeout_seconds + 30
     deps = Deps(settings, embedder, retriever, llm, companies)
     results = []
     try:
@@ -127,24 +157,22 @@ async def evaluate(questions: list[dict], with_llm: bool) -> tuple[list[Question
             r = QuestionResult(
                 id=q["id"], question=q["question"], type=q["type"], answer_in=q["answer_in"], seen=q["seen"],
                 tickers_used=tickers, top=top, best_distance=None if best is None else round(best, 4),
-                refused_by_threshold=best is None or best > settings.no_answer_distance,
+                refused_by_threshold=best is None or best > no_answer_threshold(settings, text, companies),
                 hit_rank=hit_rank(top, q["expected_pages"]),
             )
             if with_llm:
                 t0 = time.perf_counter()
-                tokens, error = [], None
-                async for event in answer_events(req, deps):
-                    name, data = _parse_sse(event)
-                    if name == "token":
-                        tokens.append(data["text"])
-                    elif name == "error":
-                        error = data["message"]
-                r.answer = "".join(tokens)
-                r.error = error
+                try:
+                    r.answer, r.error = await asyncio.wait_for(_ask(req, deps), question_timeout)
+                except TimeoutError:
+                    r.answer, r.error = "", f"評估逾時（超過 {question_timeout:g} 秒）"
                 r.latency = round(time.perf_counter() - t0, 1)
+                r.truncated = TRUNCATED_NOTE in r.answer
                 r.refused_by_answer = NO_ANSWER in r.answer
-                r.answer_correct = error is None and check_answer(r.answer, q["answer_check"])
+                r.answer_correct = r.error is None and check_answer(r.answer, q["answer_check"])
             results.append(r)
+            if on_result:
+                on_result(results, settings)
             print(f"{r.id} rank={r.hit_rank} best={r.best_distance}" + (f" correct={r.answer_correct} {r.latency}s" if with_llm else ""))
     finally:
         await retriever.close()
@@ -163,7 +191,7 @@ def _parse_sse(event: str) -> tuple[str, object]:
 
 
 def retrieval_metrics(rs: list[QuestionResult]) -> dict:
-    rs = [r for r in rs if r.type != "refusal"]
+    rs = [r for r in rs if not is_refusal(r.type)]
     n = len(rs)
     if not n:
         return {"n": 0}
@@ -175,8 +203,8 @@ def retrieval_metrics(rs: list[QuestionResult]) -> dict:
 
 
 def refusal_metrics(rs: list[QuestionResult], attr: str) -> dict:
-    refusal = [r for r in rs if r.type == "refusal"]
-    answerable = [r for r in rs if r.type != "refusal"]
+    refusal = [r for r in rs if is_refusal(r.type)]
+    answerable = [r for r in rs if not is_refusal(r.type)]
     return {
         "refusal_recall": sum(getattr(r, attr) for r in refusal) / len(refusal) if refusal else None,
         "false_refusal": sum(getattr(r, attr) for r in answerable) / len(answerable) if answerable else None,
@@ -191,7 +219,14 @@ def summarize(results: list[QuestionResult], settings: Settings, with_llm: bool)
         for value in sorted({getattr(r, key) for r in results if getattr(r, key)}):
             groups[f"{label}={value}"] = [r for r in results if getattr(r, key) == value]
     summary = {
-        "settings": {"top_k": settings.top_k, "no_answer_distance": settings.no_answer_distance, "llm_model": settings.llm_model},
+        "settings": {
+            "top_k": settings.top_k,
+            "no_answer_distance": settings.no_answer_distance,
+            "no_answer_distance_with_company": settings.no_answer_distance_with_company,
+            "llm_model": settings.llm_model,
+            "llm_max_tokens": settings.llm_max_tokens,
+            "ask_timeout_seconds": settings.ask_timeout_seconds,
+        },
         "retrieval": {
             scope: {g: retrieval_metrics(rs if scope == "all" else [r for r in rs if not r.seen]) for g, rs in groups.items()}
             for scope in ("all", "unseen")
@@ -249,35 +284,50 @@ def render(all_results: dict[str, dict], questions: dict[str, dict]) -> str:
            "- **回答正確**：去掉逗號與空白後，回答包含 answer_check 指定的數字＋單位（數字題）或全部關鍵字（文字題）；拒答題要回答查無資料。",
            "- 樣本只有 26 題，**1 題約等於 4%**；董事長題（t01、t06、t07、a02）列入所有寫出「董事長＋姓名」的頁，命中範圍較寬。", ""]
 
-    labels = list(all_results)
+    labels = [lb for lb in all_results if not lb.startswith(HELDOUT_PREFIX)]
+    heldout = [lb for lb in all_results if lb.startswith(HELDOUT_PREFIX)]
     if len(labels) > 1:
-        out += ["## 各版本比較（全部題目）", "",
-                "| label | hit@1 | hit@3 | hit@8 | MRR | 拒答召回率（門檻） | 誤拒率（門檻） | 回答正確率 |", "|---|---|---|---|---|---|---|---|"]
+        out += ["## 逐步改進（主題組 26 題）", "",
+                "依執行順序排列；各列的設定見下方各版本段落與說明（例如 2a 已撤回）。拒答／誤拒率以最終回答（含 LLM）計算。",
+                "LLM temperature 0.1，同一設定重跑可能差 1～2 題（約 4～8%），小於這個幅度的差異不宜解讀成改善。", "",
+                "| 版本 | hit@1 | hit@3 | hit@8 | MRR | 拒答召回率 | 誤拒率 | 回答正確率 | 回答正確率（unseen） |",
+                "|---|---|---|---|---|---|---|---|---|"]
         for lb in labels:
             s = all_results[lb]
             m = s["retrieval"]["all"]["全部"]
-            rf = s["refusal_threshold"]
-            ans = pct(s["answer"]["all"]) if "answer" in s else "—"
+            rf = s.get("refusal_answer", s["refusal_threshold"])
+            a = s.get("answer", {})
             out.append(f"| {lb} | {pct(m['hit@1'])} | {pct(m['hit@3'])} | {pct(m['hit@8'])} | {m['mrr']:.2f} | "
-                       f"{pct(rf['refusal_recall'])} | {pct(rf['false_refusal'])} | {ans} |")
+                       f"{pct(rf['refusal_recall'])} | {pct(rf['false_refusal'])} | {pct(a.get('all'))} | {pct(a.get('unseen'))} |")
         out.append("")
+    for lb in heldout:
+        out += render_heldout(lb, all_results[lb], questions)
 
     for lb in labels:
         s = all_results[lb]
         st = s["settings"]
-        out += [f"## {lb}", "", f"設定：top_k={st['top_k']}、NO_ANSWER_DISTANCE={st['no_answer_distance']}、LLM={st['llm_model']}；執行時間 {s.get('run_at', '')}", ""]
+        out += [f"## {lb}", "", f"設定：{settings_text(st)}；執行時間 {s.get('run_at', '')}", ""]
+        if s.get("note"):
+            out += [f"**說明：** {s['note']}", ""]
+        if s.get("complete") is False:
+            out += [f"**進行中或中斷：** 已完成 {s['n_done']}/{s['n_total']} 題，以下指標只含已完成的題目。", ""]
+        n_trunc = sum(bool(r.get("truncated")) for r in s["questions"])
+        if "answer" in s:
+            out += [f"回答被截斷（輸出上限或逾時）：{n_trunc} 題。", ""]
         out += ["### 檢索（全部題目）", ""] + retrieval_table(s["retrieval"]["all"]) + [""]
         out += ["### 檢索（只看 seen=false）", ""] + retrieval_table(s["retrieval"]["unseen"]) + [""]
         sv = s["seen_vs_unseen"]
         out += ["### seen 與 unseen 比較", "", "| 組別 | 題數 | hit@1 | hit@3 | hit@8 | MRR |", "|---|---|---|---|---|---|"]
         for g in ("seen", "unseen"):
             m = sv[g]
+            if not m.get("n"):  # 跑到一半時某組可能還沒有題目
+                continue
             out.append(f"| {g} | {m['n']} | {pct(m['hit@1'])} | {pct(m['hit@3'])} | {pct(m['hit@8'])} | {m['mrr']:.2f} |")
         out.append("")
 
         out += ["### 拒答", "", "| 判斷方式 | 拒答召回率 | 誤拒率 |", "|---|---|---|"]
         rt = s["refusal_threshold"]
-        out.append(f"| 門檻（{st['no_answer_distance']}） | {pct(rt['refusal_recall'])}（{rt['n_refusal']} 題） | {pct(rt['false_refusal'])}（{rt['n_answerable']} 題） |")
+        out.append(f"| 程式層門檻 | {pct(rt['refusal_recall'])}（{rt['n_refusal']} 題） | {pct(rt['false_refusal'])}（{rt['n_answerable']} 題） |")
         if "refusal_answer" in s:
             ra = s["refusal_answer"]
             out.append(f"| 最終回答（含 LLM） | {pct(ra['refusal_recall'])} | {pct(ra['false_refusal'])} |")
@@ -295,14 +345,14 @@ def render(all_results: dict[str, dict], questions: dict[str, dict]) -> str:
                 "| id | type | 命中名次 | 最近距離 | 前 3 名（ticker p頁 kind 距離） | 回答正確 |", "|---|---|---|---|---|---|"]
         for r in s["questions"]:
             top3 = "<br>".join(f"{x['ticker']} p{x['page']} {x['kind']} {x['distance']:.3f}" for x in r["top"][:3]) or "—"
-            rank = "拒答題" if r["type"] == "refusal" else (r["hit_rank"] or "✗")
+            rank = "拒答題" if is_refusal(r["type"]) else (r["hit_rank"] or "✗")
             ok = "—" if r["answer_correct"] is None else ("✓" if r["answer_correct"] else "✗")
             out.append(f"| {r['id']} | {r['type']} | {rank} | {r['best_distance']} | {top3} | {ok} |")
         out.append("")
 
         failures = [r for r in s["questions"]
-                    if (r["type"] != "refusal" and (r["hit_rank"] is None or r["hit_rank"] > 3))
-                    or (r["type"] == "refusal" and not r["refused_by_threshold"])
+                    if (not is_refusal(r["type"]) and (r["hit_rank"] is None or r["hit_rank"] > 3))
+                    or (is_refusal(r["type"]) and not r["refused_by_threshold"])
                     or r["answer_correct"] is False]
         out += ["### 失敗題目", "", "檢索沒進前 3 名、拒答題沒被門檻擋下、或回答錯誤的題目。", ""]
         for r in failures:
@@ -313,28 +363,124 @@ def render(all_results: dict[str, dict], questions: dict[str, dict]) -> str:
                     "  - 前 3 名：" + "、".join(f"{x['ticker']} p{x['page']}（{x['kind']}，{x['distance']:.3f}）" for x in r["top"][:3])]
             if r["answer"] is not None:
                 out.append(f"  - 回答：{r['answer'].replace(chr(10), ' ')}")
+            if r.get("error"):
+                out.append(f"  - 錯誤：{r['error']}")
         out.append("")
     return "\n".join(out)
 
 
+def settings_text(st: dict) -> str:
+    with_company = st.get("no_answer_distance_with_company")
+    threshold = f"NO_ANSWER_DISTANCE={st['no_answer_distance']}" + (
+        f"（問題提到已知公司時 {with_company}）" if with_company is not None else "（不分是否提到公司）")
+    limits = (f"、輸出上限 {st['llm_max_tokens']} token、/ask 逾時 {st['ask_timeout_seconds']:g} 秒"
+              if "llm_max_tokens" in st else "、無輸出上限")
+    return f"top_k={st['top_k']}、{threshold}、LLM={st['llm_model']}{limits}"
+
+
+def render_heldout(label: str, s: dict, questions: dict[str, dict]) -> list[str]:
+    """held-out 只看最後驗收結果：每題列出判斷依據，因為題數少，逐題看比看比例有意義。"""
+    out = [f"## 驗收：{label}（held-out 6 題，調整規則時沒看過）", "",
+           f"設定：{settings_text(s['settings'])}；執行時間 {s.get('run_at', '')}", ""]
+    if s.get("note"):
+        out += [f"**說明：** {s['note']}", ""]
+    if s.get("complete") is False:
+        out += [f"**進行中或中斷：** 已完成 {s['n_done']}/{s['n_total']} 題。", ""]
+    if "aborted" in s:
+        # 中止的驗收不算任何比例：沒跑到的題目不能當成答錯，也不能當成答對
+        out += [f"**驗收未完成：** {s['aborted']}", "", "| id | type | 題目 | 狀態 |", "|---|---|---|---|"]
+        out += [f"| {r['id']} | {r['type']} | {r['question']} | {r['status']} |" for r in s["questions"]]
+        return out + [""]
+    out += ["| id | type | 題目 | 最近距離 | 程式層拒答 | 最終回答 | 正確 |", "|---|---|---|---|---|---|---|"]
+    for r in s["questions"]:
+        refused = "是" if r["refused_by_threshold"] else "否"
+        answer = (r["answer"] or r.get("error") or "—").replace("\n", " ").replace("|", "／")
+        ok = "—" if r["answer_correct"] is None else ("✓" if r["answer_correct"] else "✗")
+        out.append(f"| {r['id']} | {r['type']} | {r['question']} | {r['best_distance']} | {refused} | {answer} | {ok} |")
+    a, ra = s.get("answer", {}), s.get("refusal_answer", s["refusal_threshold"])
+    rt = s["refusal_threshold"]
+    out += ["", f"程式層門檻：拒答召回率 {pct(rt['refusal_recall'])}、誤拒率 {pct(rt['false_refusal'])}。"]
+    out += ["", f"回答正確率 {pct(a.get('all'))}；拒答召回率 {pct(ra['refusal_recall'])}（{ra['n_refusal']} 題）、"
+            f"誤拒率 {pct(ra['false_refusal'])}（{ra['n_answerable']} 題）。", ""]
+    if s.get("manual_review"):
+        # 人工複核只加註、不改自動判分：驗收看完結果後不能再改規則
+        out += ["**人工複核：**", ""] + [f"- {line}" for line in s["manual_review"]] + [""]
+    return out
+
+
+def rescore(all_results: dict[str, dict], questions: dict[str, dict]) -> None:
+    """用 results.json 裡存的回答重新判分：修正判分規則時，所有版本要用同一套規則才能比較。"""
+    for s in all_results.values():
+        if "answer" not in s:
+            continue
+        for r in s["questions"]:
+            if r["answer"] is not None:
+                r["answer_correct"] = r["error"] is None and check_answer(r["answer"], questions[r["id"]]["answer_check"])
+        rs = s["questions"]
+        by_type = {}
+        for t in sorted({r["type"] for r in rs}):
+            group = [r for r in rs if r["type"] == t]
+            by_type[t] = {"n": len(group), "correct": sum(bool(r["answer_correct"]) for r in group) / len(group)}
+        unseen = [r for r in rs if not r["seen"]]
+        s["answer"].update(
+            by_type=by_type,
+            all=sum(bool(r["answer_correct"]) for r in rs) / len(rs),
+            unseen=sum(bool(r["answer_correct"]) for r in unseen) / len(unseen) if unseen else None,
+        )
+
+
+def load_all_questions() -> dict[str, dict]:
+    out = {}
+    for path in (QUESTIONS, ROOT / "eval" / "questions_heldout.jsonl"):
+        if path.exists():
+            out.update({q["id"]: q for q in map(json.loads, path.read_text(encoding="utf-8").splitlines()) if q})
+    return out
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--label", required=True, help="這次結果的名稱，例如 baseline")
+    ap.add_argument("--label", help="這次結果的名稱，例如 baseline")
+    ap.add_argument("--rescore", action="store_true", help="只用已存的回答重新判分並重產報告")
     ap.add_argument("--with-llm", action="store_true", help="同時評估 LLM 回答（每題約數秒）")
+    ap.add_argument("--questions", type=Path, default=QUESTIONS)
+    ap.add_argument("--note", help="寫進報告的說明，例如為什麼重跑")
     args = ap.parse_args()
+    if args.rescore:
+        all_results = json.loads(RESULTS_JSON.read_text(encoding="utf-8"))
+        questions = load_all_questions()
+        rescore(all_results, questions)
+        RESULTS_JSON.write_text(json.dumps(all_results, ensure_ascii=False, indent=2), encoding="utf-8")
+        RESULTS_MD.write_text(render(all_results, questions), encoding="utf-8")
+        for lb, s in all_results.items():
+            if "answer" in s:
+                print(f"{lb}: 回答正確率 {pct(s['answer']['all'])}")
+        return 0
+    if not args.label:
+        ap.error("需要 --label")
+    is_heldout = args.questions.resolve() != QUESTIONS.resolve()
+    if is_heldout and not args.label.startswith(HELDOUT_PREFIX):
+        ap.error(f"非主題組的結果 label 要以 {HELDOUT_PREFIX} 開頭，才不會混進逐步改進表")
 
-    questions = [json.loads(line) for line in QUESTIONS.read_text(encoding="utf-8").splitlines() if line.strip()]
-    results, settings = asyncio.run(evaluate(questions, args.with_llm))
-    summary = summarize(results, settings, args.with_llm)
-    summary["run_at"] = time.strftime("%Y-%m-%d %H:%M")
+    questions = [json.loads(line) for line in args.questions.read_text(encoding="utf-8").splitlines() if line.strip()]
+    run_at = time.strftime("%Y-%m-%d %H:%M")
 
-    all_results = json.loads(RESULTS_JSON.read_text(encoding="utf-8")) if RESULTS_JSON.exists() else {}
-    all_results[args.label] = summary
-    RESULTS_JSON.write_text(json.dumps(all_results, ensure_ascii=False, indent=2), encoding="utf-8")
-    RESULTS_MD.write_text(render(all_results, {q["id"]: q for q in questions}), encoding="utf-8")
+    def save(results: list[QuestionResult], settings: Settings, complete: bool = False) -> dict:
+        summary = summarize(results, settings, args.with_llm)
+        summary.update(run_at=run_at, complete=complete, n_done=len(results), n_total=len(questions))
+        if args.note:
+            summary["note"] = args.note
+        all_results = json.loads(RESULTS_JSON.read_text(encoding="utf-8")) if RESULTS_JSON.exists() else {}
+        all_results[args.label] = summary
+        RESULTS_JSON.write_text(json.dumps(all_results, ensure_ascii=False, indent=2), encoding="utf-8")
+        RESULTS_MD.write_text(render(all_results, load_all_questions()), encoding="utf-8")
+        return summary
+
+    results, settings = asyncio.run(evaluate(questions, args.with_llm, on_result=save))
+    summary = save(results, settings, complete=True)
 
     m = summary["retrieval"]["all"]["全部"]
-    print(f"\n[{args.label}] hit@1 {pct(m['hit@1'])} hit@3 {pct(m['hit@3'])} hit@8 {pct(m['hit@8'])} MRR {m['mrr']:.2f}")
+    if m.get("n"):
+        print(f"\n[{args.label}] hit@1 {pct(m['hit@1'])} hit@3 {pct(m['hit@3'])} hit@8 {pct(m['hit@8'])} MRR {m['mrr']:.2f}")
     if args.with_llm:
         print(f"回答正確率 {pct(summary['answer']['all'])}")
     print(f"寫入 {RESULTS_MD.relative_to(ROOT)}")
