@@ -108,7 +108,9 @@ chunks(
 ```bash
 ollama pull bge-m3
 ollama pull qwen3.5:2b
-docker run -d --name twse-db -e POSTGRES_PASSWORD=postgres -p 5432:5432 pgvector/pgvector:pg16
+docker run -d --name twse-pg -e POSTGRES_USER=twse -e POSTGRES_PASSWORD=twse -e POSTGRES_DB=twse \
+  -p 5432:5432 -v twse-pg-data:/var/lib/postgresql/data pgvector/pgvector:pg16
+docker exec twse-pg psql -U twse -d twse -c "CREATE DATABASE twse_test;"   # pytest 整合測試用
 
 pip install -r requirements-ingest.txt
 python scripts/check_pdf_text.py data/pdfs/
