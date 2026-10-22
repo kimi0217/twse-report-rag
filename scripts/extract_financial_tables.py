@@ -10,9 +10,12 @@
 
 做法：
 1. 先用 PyMuPDF 快速掃全部頁面，找出含財務關鍵字的頁（跳過目錄頁）。
-2. 只對這些頁用 pdfplumber 抽表格（pdfplumber 慢，不要整本跑）。
-3. 先用「格線」策略；抽不到才退回「文字對齊」策略，並在輸出標記為 fallback。
-4. 表格上方的那一行文字當作表名，存成 metadata。
+2. 只對這些頁用 pdfplumber 的「格線」策略抽表格（pdfplumber 慢，不要整本跑）。
+   「文字對齊」策略常把兩欄排版的內文誤認成表格，一律不用。
+3. 品質檢查：項目欄大多空白、只剩數字的表格，改用 PyMuPDF find_tables() 重抽；
+   重抽還是不合格就丟掉。jsonl 的 tool 欄位記錄最後用哪個工具。
+4. 只留含財務項目（營業收入、資產、負債…）的表格，排除 ESG、公司治理等表。
+5. 表名取表格正上方、同一欄位範圍內最近的文字行（跨頁版 PDF 一頁有左右兩張表）。
 """
 
 from __future__ import annotations
@@ -39,7 +42,14 @@ DEFAULT_KEYWORDS = [
     "財務績效",
 ]
 TOC_HINT = re.compile(r"目\s*錄|\.{6,}|…{3,}")
-TEXT_STRATEGY = {"vertical_strategy": "text", "horizontal_strategy": "text"}
+# 用來判斷「這是財務表格」：關鍵字出現在表格內容，而不是頁面上
+FINANCIAL_TERMS = ["營業收入", "營業毛利", "營業利益", "淨利", "資產", "負債", "權益", "每股盈餘", "現金流量", "現金餘額"]
+NUMERIC_LINE = re.compile(r"[\d,.\s()%$\-]+")
+# PyMuPDF 會把部分字型的千分位逗號抽成獨立一行：「1630955164\n, , ,」
+DETACHED_COMMAS = re.compile(r"(\(?)(-?\d+)(\)?)\n[,\s]+")
+TITLE_SEARCH_HEIGHT = 80
+# 表名常比表格左緣多凸出一點（「7.1 合併財務報表」的 7 會被切掉）；跨頁版左右兩表間距約 100pt，20pt 不會越界
+TITLE_SEARCH_MARGIN = 20
 
 
 def parse_pages(spec: str) -> list[int]:
@@ -61,10 +71,18 @@ def find_candidate_pages(path: Path, keywords: list[str]) -> list[int]:
     return hits
 
 
+def _fix_detached_commas(cell: str) -> str:
+    m = DETACHED_COMMAS.fullmatch(cell.strip())
+    if not m:
+        return cell
+    left, digits, right = m.groups()
+    return f"{left}{int(digits):,}{right}"
+
+
 def clean_cell(cell: str | None) -> str:
     if cell is None:
         return ""
-    return normalize_text(cell).replace("\n", "").replace("|", "\\|")
+    return normalize_text(_fix_detached_commas(cell)).replace("\n", "").replace("|", "\\|")
 
 
 def clean_table(rows: list[list[str | None]]) -> list[list[str]]:
@@ -91,12 +109,34 @@ def to_markdown(table: list[list[str]]) -> str:
     return "\n".join(lines)
 
 
-def guess_title(page: pdfplumber.page.Page, top: float) -> str:
-    if top < 5:
+def pick_title(lines_above: list[str]) -> str:
+    """lines_above 由上到下排列；最後一行離表格最近。
+
+    純數字行（頁碼、上一張表的殘行）跳過；優先選含「表」「分析」的行。
+    「合併」「個體」決定數字是哪一份報表，選中的行沒有就把那一行補在前面，
+    否則問「合併營收」時可能拿到個體報表的數字。
+    """
+    lines = [ln for ln in (normalize_text(x) for x in lines_above) if ln and not NUMERIC_LINE.fullmatch(ln)]
+    if not lines:
         return ""
-    region = page.crop((0, max(0, top - 60), page.width, top))
-    lines = [ln.strip() for ln in (region.extract_text() or "").splitlines() if ln.strip()]
-    return normalize_text(lines[-1]) if lines else ""
+    nearest_first = lines[::-1]
+    title = next((ln for ln in nearest_first if "表" in ln or "分析" in ln), nearest_first[0])
+    scope = next((ln for ln in nearest_first if "合併" in ln or "個體" in ln), None)
+    if scope and scope != title:
+        title = f"{scope} {title}"
+    unit = next((ln for ln in nearest_first if ln.startswith("單位")), None)
+    if unit and unit not in title:
+        title = f"{title}（{unit}）"
+    return title
+
+
+def title_lines_above(page: pymupdf.Page, bbox: tuple[float, float, float, float]) -> list[str]:
+    # 只看表格自己的 x 範圍：跨頁版一頁左右各一張表，全頁寬會抓到隔壁表的標題
+    x0, top, x1, _ = bbox
+    if top < 5:
+        return []
+    clip = pymupdf.Rect(x0 - TITLE_SEARCH_MARGIN, max(0, top - TITLE_SEARCH_HEIGHT), x1 + TITLE_SEARCH_MARGIN, top)
+    return page.get_text("text", clip=clip, sort=True).splitlines()
 
 
 def is_useful(table: list[list[str]]) -> bool:
@@ -106,22 +146,59 @@ def is_useful(table: list[list[str]]) -> bool:
     return any(re.search(r"\d", c) for r in table for c in r)
 
 
-def extract(path: Path, pages: list[int]) -> list[dict]:
+def is_financial(table: list[list[str]]) -> bool:
+    # 只看項目欄：ESG 表的描述欄常提到「資產」「現金流量」，看整張表會誤收
+    labels = "".join(r[0] for r in table)
+    return any(term in labels for term in FINANCIAL_TERMS)
+
+
+def has_labels(table: list[list[str]]) -> bool:
+    """有數字的列裡，項目欄（第一欄）要過半有字；否則數字對不回項目，進 RAG 只會誤導。"""
+    numeric_rows = [r for r in table[1:] if any(re.search(r"\d", c) for c in r[1:])]
+    if not numeric_rows:
+        return False
+    labeled = sum(bool(r[0]) for r in numeric_rows)
+    return labeled * 2 > len(numeric_rows)
+
+
+def _overlap(a: tuple, b: tuple) -> float:
+    w = min(a[2], b[2]) - max(a[0], b[0])
+    h = min(a[3], b[3]) - max(a[1], b[1])
+    return max(w, 0) * max(h, 0)
+
+
+def reextract_with_pymupdf(page: pymupdf.Page, bbox: tuple) -> tuple[list[list[str]], tuple] | None:
+    """在同一頁找跟 pdfplumber 表格重疊最多的那張 PyMuPDF 表格。"""
+    candidates = [t for t in page.find_tables().tables if _overlap(t.bbox, bbox) > 0]
+    if not candidates:
+        return None
+    best = max(candidates, key=lambda t: _overlap(t.bbox, bbox))
+    return clean_table(best.extract()), tuple(best.bbox)
+
+
+def extract(path: Path, pages: list[int], stats: dict[str, int] | None = None) -> list[dict]:
+    """stats 會累計丟棄原因，讓 CLI 印出來，方便判斷篩選規則是否太嚴。"""
+    stats = stats if stats is not None else {}
     results = []
-    with pdfplumber.open(path) as pdf:
+    with pdfplumber.open(path) as pdf, pymupdf.open(path) as doc:
         for i in pages:
             if i >= len(pdf.pages):
                 continue
-            page = pdf.pages[i]
-            found = page.find_tables()
-            method = "lines"
-            if not found:
-                found = page.find_tables(TEXT_STRATEGY)
-                method = "text-fallback"
             k = 0
-            for t in found:
-                table = clean_table(t.extract())
+            for t in pdf.pages[i].find_tables():
+                table, bbox, tool = clean_table(t.extract()), t.bbox, "pdfplumber"
                 if not is_useful(table):
+                    continue
+                # 先修項目欄再判斷是不是財務表：項目欄空白時財務關鍵字也一起不見了
+                if not has_labels(table):
+                    retry = reextract_with_pymupdf(doc[i], bbox)
+                    if retry is None or not is_useful(retry[0]) or not has_labels(retry[0]):
+                        stats["no_labels"] = stats.get("no_labels", 0) + 1
+                        continue
+                    (table, bbox), tool = retry, "pymupdf"
+                    stats["pymupdf"] = stats.get("pymupdf", 0) + 1
+                if not is_financial(table):
+                    stats["not_financial"] = stats.get("not_financial", 0) + 1
                     continue
                 k += 1
                 results.append(
@@ -129,8 +206,8 @@ def extract(path: Path, pages: list[int]) -> list[dict]:
                         "file": path.name,
                         "page": i + 1,
                         "table_index": k,
-                        "title": guess_title(page, t.bbox[1]),
-                        "method": method,
+                        "title": pick_title(title_lines_above(doc[i], bbox)),
+                        "tool": tool,
                         "rows": len(table),
                         "cols": len(table[0]),
                         "markdown": to_markdown(table),
@@ -155,12 +232,12 @@ def main() -> int:
 
     for f in files:
         pages = parse_pages(args.pages) if args.pages else find_candidate_pages(f, keywords)
-        tables = extract(f, pages)
-        fallback = sum(t["method"] == "text-fallback" for t in tables)
+        stats: dict[str, int] = {}
+        tables = extract(f, pages, stats)
 
         md = [f"# {f.name} 財務表格\n"]
         for t in tables:
-            note = "（文字對齊模式，請人工確認）" if t["method"] == "text-fallback" else ""
+            note = "（PyMuPDF 重抽）" if t["tool"] == "pymupdf" else ""
             md.append(f"## 第 {t['page']} 頁・表 {t['table_index']}：{t['title'] or '（無標題）'}{note}\n")
             md.append(t["markdown"] + "\n")
         (args.out / f"{f.stem}.md").write_text("\n".join(md), encoding="utf-8")
@@ -170,7 +247,8 @@ def main() -> int:
 
         page_list = ", ".join(str(p + 1) for p in pages[:15]) + (" …" if len(pages) > 15 else "")
         print(f"{f.name}: 候選頁 {len(pages)} 頁 [{page_list}] → 抽出 {len(tables)} 張表"
-              + (f"（其中 {fallback} 張是 fallback，要人工看）" if fallback else ""))
+              f"（PyMuPDF 重抽 {stats.get('pymupdf', 0)}；丟棄：非財務 {stats.get('not_financial', 0)}、"
+              f"項目欄空白 {stats.get('no_labels', 0)}）")
     print(f"\n輸出：{args.out}/")
     return 0
 

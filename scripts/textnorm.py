@@ -12,11 +12,16 @@ import unicodedata
 
 _MULTI_SPACE = re.compile(r"[ \t　]+")
 _MULTI_NEWLINE = re.compile(r"\n{3,}")
+# 中文排版用字距對齊（「股　本」「差　異」），抽字後變成字間空白，
+# 會讓「股本」這類關鍵字比對不到；中文本來就不用空白分詞，刪掉不會傷到語意。
+_CJK = r"\u3400-\u4dbf\u4e00-\u9fff"
+_CJK_GAP = re.compile(rf"(?<=[{_CJK}]) +(?=[{_CJK}])")
 
 
 def normalize_text(text: str) -> str:
     text = unicodedata.normalize("NFKC", text)
     text = text.replace("�", "")
     text = _MULTI_SPACE.sub(" ", text)
+    text = _CJK_GAP.sub("", text)
     text = _MULTI_NEWLINE.sub("\n\n", text)
     return text.strip()

@@ -24,8 +24,8 @@ def _text_page(doc: pymupdf.Document, text: str, font: str = FONT) -> pymupdf.Pa
     return page
 
 
-def _ruled_table(page: pymupdf.Page, top: float, rows: list[list[str]]) -> None:
-    x0, col_w, row_h = 50, 140, 24
+def _ruled_table(page: pymupdf.Page, top: float, rows: list[list[str]], x0: float = 50) -> None:
+    col_w, row_h = 140, 24
     width = col_w * len(rows[0])
     shape = page.new_shape()
     for r in range(len(rows) + 1):
@@ -62,6 +62,25 @@ def make_good(path: Path) -> None:
     doc.save(path)
 
 
+def make_spread(path: Path) -> None:
+    """跨頁版：一頁左右各一張表（像台積電年報），另加一張非財務表。
+
+    左右表名不同，用來確認表名只從表格自己的 x 範圍找。
+    """
+    doc = pymupdf.open()
+    page = doc.new_page(width=1190, height=842)
+    page.insert_text((50, 60), "財務狀況分析", fontname=FONT, fontsize=12)
+    page.insert_text((50, 90), "合併財務報表", fontname=FONT, fontsize=11)
+    page.insert_text((650, 90), "個體財務報表", fontname=FONT, fontsize=11)
+    page.insert_text((650, 110), "單位：新台幣仟元", fontname=FONT, fontsize=9)
+    rows = [["項目", "114年", "113年"], ["資產總額", "7,933,023", "6,691,938"], ["負債總額", "2,472,228", "2,368,362"]]
+    _ruled_table(page, 120, rows, x0=50)
+    _ruled_table(page, 120, [rows[0], ["資產總額", "7,276,214", "6,037,249"], ["負債總額", "1,856,618", "1,748,704"]], x0=650)
+    page.insert_text((50, 330), "董事會成員出席情形", fontname=FONT, fontsize=11)
+    _ruled_table(page, 340, [["姓名", "出席次數", "出席率"], ["王小明", "6", "100%"]], x0=50)
+    doc.save(path)
+
+
 def make_scanned(path: Path) -> None:
     """把正常頁面轉成圖片再貼回去，模擬掃描檔（沒有文字層）。"""
     src = pymupdf.open()
@@ -90,10 +109,12 @@ def make_all(out: Path) -> dict[str, Path]:
         "good": out / "good.pdf",
         "scanned": out / "scanned.pdf",
         "mojibake": out / "mojibake.pdf",
+        "spread": out / "spread.pdf",
     }
     make_good(paths["good"])
     make_scanned(paths["scanned"])
     make_big5_mojibake(paths["mojibake"])
+    make_spread(paths["spread"])
     return paths
 
 
