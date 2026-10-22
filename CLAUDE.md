@@ -9,7 +9,8 @@
 - [x] PDF 前置檢查：`scripts/check_pdf_text.py`、`scripts/extract_financial_tables.py`、`scripts/textnorm.py`（說明見 `docs/pdf-preflight.md`）
 - [x] 年報資料：2308、2317、2330、2382、2454 的 2025 年報；財務表格抽取品質修正（PyMuPDF 重抽、內容篩選、表名、續表、錯字表）
 - [x] 2412 中華電淘汰（內文約 17% 字被字型換成罕見字），原檔留在 `data/rejected/`，改用 2382 廣達；`check_pdf_text.py` 新增罕見字比例指標
-- [ ] ingestion：PDF 內文 + 表格 → chunk → embedding → PostgreSQL (pgvector)
+- [x] ingestion（內文）：`scripts/ingest.py`、`scripts/embeddings.py`；5 家共 1,798 個 text chunk，bge-m3 (1024 維)、HNSW cosine
+- [ ] ingestion（表格）：`data/tables/*.jsonl` → kind='table' chunk
 - [ ] 後端 API：FastAPI，`/companies`、`/ask`（SSE 串流）
 - [ ] 前端：React 聊天頁 + 引用卡片
 - [ ] 評估：`eval/` 問題集 + hit@k
@@ -41,7 +42,9 @@ data/pdfs/            年報 PDF（不進 git），檔名格式：<股票代號>
 data/tables/          extract_financial_tables.py 的輸出（.md 給人看、.jsonl 給 ingestion），不進 git
 data/char_fixes.json  依 PDF 檔名設定的錯字替換表（進 git）
 data/rejected/        前置檢查 FAIL 的年報，留作 README 的證據（不進 git，ingestion 不讀）
-scripts/              離線資料處理（textnorm、檢查、表格抽取、ingest.py）
+scripts/              離線資料處理（textnorm、檢查、表格抽取、ingest.py、embeddings.py）
+config/companies.json 股票代號 → 公司名稱對照（新增公司要加在這裡）
+data/embeddings_cache.jsonl  embedding 快取（依「模型 + 文字」hash），不進 git
 backend/              FastAPI 服務
 frontend/             React + Vite + TypeScript + Tailwind
 eval/                 questions.jsonl 與 run_eval.py
@@ -109,7 +112,8 @@ docker run -d --name twse-db -e POSTGRES_PASSWORD=postgres -p 5432:5432 pgvector
 pip install -r requirements-ingest.txt
 python scripts/check_pdf_text.py data/pdfs/
 python scripts/extract_financial_tables.py data/pdfs/
-python -m pytest -q
+python scripts/ingest.py data/pdfs/          # 需要 pgvector 容器與 Ollama (bge-m3)
+python -m pytest -q                          # 資料庫整合測試用 TEST_DATABASE_URL（twse_test），連不上會跳過
 ```
 
 （後端、前端、docker-compose 完成後把指令補在這裡。）
