@@ -1,0 +1,1952 @@
+{
+  "baseline": {
+    "settings": {
+      "top_k": 8,
+      "no_answer_distance": 0.33,
+      "llm_model": "qwen3.5:2b"
+    },
+    "retrieval": {
+      "all": {
+        "全部": {
+          "n": 22,
+          "hit@1": 0.6363636363636364,
+          "hit@3": 0.9090909090909091,
+          "hit@8": 1.0,
+          "mrr": 0.7780303030303031
+        },
+        "type=alias": {
+          "n": 2,
+          "hit@1": 0.0,
+          "hit@3": 0.0,
+          "hit@8": 1.0,
+          "mrr": 0.225
+        },
+        "type=cross": {
+          "n": 1,
+          "hit@1": 0.0,
+          "hit@3": 1.0,
+          "hit@8": 1.0,
+          "mrr": 0.3333333333333333
+        },
+        "type=numeric": {
+          "n": 11,
+          "hit@1": 0.9090909090909091,
+          "hit@3": 1.0,
+          "hit@8": 1.0,
+          "mrr": 0.9545454545454546
+        },
+        "type=refusal": {
+          "n": 0
+        },
+        "type=text": {
+          "n": 8,
+          "hit@1": 0.5,
+          "hit@3": 1.0,
+          "hit@8": 1.0,
+          "mrr": 0.7291666666666666
+        },
+        "answer_in=both": {
+          "n": 6,
+          "hit@1": 0.8333333333333334,
+          "hit@3": 0.8333333333333334,
+          "hit@8": 1.0,
+          "mrr": 0.875
+        },
+        "answer_in=table": {
+          "n": 1,
+          "hit@1": 1.0,
+          "hit@3": 1.0,
+          "hit@8": 1.0,
+          "mrr": 1.0
+        },
+        "answer_in=text": {
+          "n": 15,
+          "hit@1": 0.5333333333333333,
+          "hit@3": 0.9333333333333333,
+          "hit@8": 1.0,
+          "mrr": 0.7244444444444444
+        }
+      },
+      "unseen": {
+        "全部": {
+          "n": 15,
+          "hit@1": 0.6,
+          "hit@3": 0.8666666666666667,
+          "hit@8": 1.0,
+          "mrr": 0.7411111111111112
+        },
+        "type=alias": {
+          "n": 2,
+          "hit@1": 0.0,
+          "hit@3": 0.0,
+          "hit@8": 1.0,
+          "mrr": 0.225
+        },
+        "type=cross": {
+          "n": 1,
+          "hit@1": 0.0,
+          "hit@3": 1.0,
+          "hit@8": 1.0,
+          "mrr": 0.3333333333333333
+        },
+        "type=numeric": {
+          "n": 8,
+          "hit@1": 0.875,
+          "hit@3": 1.0,
+          "hit@8": 1.0,
+          "mrr": 0.9375
+        },
+        "type=refusal": {
+          "n": 0
+        },
+        "type=text": {
+          "n": 4,
+          "hit@1": 0.5,
+          "hit@3": 1.0,
+          "hit@8": 1.0,
+          "mrr": 0.7083333333333334
+        },
+        "answer_in=both": {
+          "n": 4,
+          "hit@1": 0.75,
+          "hit@3": 0.75,
+          "hit@8": 1.0,
+          "mrr": 0.8125
+        },
+        "answer_in=table": {
+          "n": 1,
+          "hit@1": 1.0,
+          "hit@3": 1.0,
+          "hit@8": 1.0,
+          "mrr": 1.0
+        },
+        "answer_in=text": {
+          "n": 10,
+          "hit@1": 0.5,
+          "hit@3": 0.9,
+          "hit@8": 1.0,
+          "mrr": 0.6866666666666666
+        }
+      }
+    },
+    "seen_vs_unseen": {
+      "seen": {
+        "n": 7,
+        "hit@1": 0.7142857142857143,
+        "hit@3": 1.0,
+        "hit@8": 1.0,
+        "mrr": 0.8571428571428571
+      },
+      "unseen": {
+        "n": 15,
+        "hit@1": 0.6,
+        "hit@3": 0.8666666666666667,
+        "hit@8": 1.0,
+        "mrr": 0.7411111111111112
+      }
+    },
+    "refusal_threshold": {
+      "refusal_recall": 1.0,
+      "false_refusal": 0.18181818181818182,
+      "n_refusal": 4,
+      "n_answerable": 22
+    },
+    "questions": [
+      {
+        "id": "n01",
+        "question": "台積電 2025 年合併營業收入是多少？",
+        "type": "numeric",
+        "answer_in": "both",
+        "seen": true,
+        "tickers_used": [
+          "2330"
+        ],
+        "top": [
+          {
+            "ticker": "2330",
+            "page": 65,
+            "kind": "table",
+            "distance": 0.2278
+          },
+          {
+            "ticker": "2330",
+            "page": 7,
+            "kind": "text",
+            "distance": 0.2612
+          },
+          {
+            "ticker": "2330",
+            "page": 65,
+            "kind": "table",
+            "distance": 0.2651
+          },
+          {
+            "ticker": "2330",
+            "page": 64,
+            "kind": "table",
+            "distance": 0.276
+          },
+          {
+            "ticker": "2330",
+            "page": 91,
+            "kind": "text",
+            "distance": 0.297
+          },
+          {
+            "ticker": "2330",
+            "page": 29,
+            "kind": "text",
+            "distance": 0.3081
+          },
+          {
+            "ticker": "2330",
+            "page": 91,
+            "kind": "text",
+            "distance": 0.3112
+          },
+          {
+            "ticker": "2330",
+            "page": 64,
+            "kind": "table",
+            "distance": 0.3152
+          }
+        ],
+        "best_distance": 0.2278,
+        "refused_by_threshold": false,
+        "hit_rank": 1,
+        "answer": "根據提供的年報段落，台積電 2025 年（民國 114 年）合併營業收入為新台幣 3,809,054,272 仟元 [1]。",
+        "answer_correct": true,
+        "refused_by_answer": false,
+        "latency": 17.1,
+        "error": null
+      },
+      {
+        "id": "n02",
+        "question": "台積電去年花多少錢在研發？",
+        "type": "numeric",
+        "answer_in": "text",
+        "seen": true,
+        "tickers_used": [
+          "2330"
+        ],
+        "top": [
+          {
+            "ticker": "2330",
+            "page": 52,
+            "kind": "text",
+            "distance": 0.2895
+          },
+          {
+            "ticker": "2330",
+            "page": 55,
+            "kind": "text",
+            "distance": 0.3493
+          },
+          {
+            "ticker": "2330",
+            "page": 10,
+            "kind": "text",
+            "distance": 0.3776
+          },
+          {
+            "ticker": "2330",
+            "page": 52,
+            "kind": "text",
+            "distance": 0.3781
+          },
+          {
+            "ticker": "2330",
+            "page": 66,
+            "kind": "text",
+            "distance": 0.3818
+          },
+          {
+            "ticker": "2330",
+            "page": 6,
+            "kind": "text",
+            "distance": 0.383
+          },
+          {
+            "ticker": "2330",
+            "page": 52,
+            "kind": "text",
+            "distance": 0.3838
+          },
+          {
+            "ticker": "2330",
+            "page": 89,
+            "kind": "text",
+            "distance": 0.3853
+          }
+        ],
+        "best_distance": 0.2895,
+        "refused_by_threshold": false,
+        "hit_rank": 1,
+        "answer": "根據年報段落 [1] 與 [5]，台積電去年（民國一百一十四年）的研發支出為新台幣 3,809,054,272 仟元。\n\n[1] 民國一百一十四年,台積公司持續投資研究與開發,全年研發總支出佔營收之6.5%,此一研發投資規模相當於或超越了許多其他高科技領導公司的規模。\n[5] 單位:新台幣仟元計劃實際或預計之資金來源所需資金總額 (民國114年及113年) 實際資金運用情形民國114年...合計2,228,417,065...\n\n*註：段落 [1] 提及的「全年研發總支出」為新台幣 3,809,054,272 仟元，而段落 [5] 列出的「實際資金運用情形」中民國一百一十四年合計金額為新台幣 2,228,417,065 仟元。依題目要求以表格段落為準，故採納段落 [1] 之資料。*",
+        "answer_correct": true,
+        "refused_by_answer": false,
+        "latency": 17.3,
+        "error": null
+      },
+      {
+        "id": "n03",
+        "question": "廣達 2025 年每股盈餘是多少？",
+        "type": "numeric",
+        "answer_in": "both",
+        "seen": true,
+        "tickers_used": [
+          "2382"
+        ],
+        "top": [
+          {
+            "ticker": "2382",
+            "page": 5,
+            "kind": "text",
+            "distance": 0.1869
+          },
+          {
+            "ticker": "2382",
+            "page": 5,
+            "kind": "text",
+            "distance": 0.2813
+          },
+          {
+            "ticker": "2382",
+            "page": 104,
+            "kind": "table",
+            "distance": 0.2844
+          },
+          {
+            "ticker": "2382",
+            "page": 97,
+            "kind": "text",
+            "distance": 0.3048
+          },
+          {
+            "ticker": "2382",
+            "page": 106,
+            "kind": "text",
+            "distance": 0.3114
+          },
+          {
+            "ticker": "2382",
+            "page": 104,
+            "kind": "text",
+            "distance": 0.3133
+          },
+          {
+            "ticker": "2382",
+            "page": 71,
+            "kind": "text",
+            "distance": 0.3161
+          },
+          {
+            "ticker": "2382",
+            "page": 103,
+            "kind": "table",
+            "distance": 0.3174
+          }
+        ],
+        "best_distance": 0.1869,
+        "refused_by_threshold": false,
+        "hit_rank": 1,
+        "answer": "根據年報資料，廣達 2025 年每股盈餘為 **19.45 元**。此資料見於「經營結果比較分析」表格中 114 年度之營業外收入及支出專案（[1]），以及致股東報告書內文（[3]、[4]）所提及。",
+        "answer_correct": true,
+        "refused_by_answer": false,
+        "latency": 12.1,
+        "error": null
+      },
+      {
+        "id": "n04",
+        "question": "廣達去年的營收大概多少？",
+        "type": "numeric",
+        "answer_in": "both",
+        "seen": false,
+        "tickers_used": [
+          "2382"
+        ],
+        "top": [
+          {
+            "ticker": "2382",
+            "page": 97,
+            "kind": "text",
+            "distance": 0.2671
+          },
+          {
+            "ticker": "2382",
+            "page": 88,
+            "kind": "text",
+            "distance": 0.2804
+          },
+          {
+            "ticker": "2382",
+            "page": 5,
+            "kind": "text",
+            "distance": 0.2975
+          },
+          {
+            "ticker": "2382",
+            "page": 104,
+            "kind": "table",
+            "distance": 0.3007
+          },
+          {
+            "ticker": "2382",
+            "page": 5,
+            "kind": "text",
+            "distance": 0.3124
+          },
+          {
+            "ticker": "2382",
+            "page": 105,
+            "kind": "text",
+            "distance": 0.3127
+          },
+          {
+            "ticker": "2382",
+            "page": 104,
+            "kind": "text",
+            "distance": 0.3159
+          },
+          {
+            "ticker": "2382",
+            "page": 105,
+            "kind": "text",
+            "distance": 0.3286
+          }
+        ],
+        "best_distance": 0.2671,
+        "refused_by_threshold": false,
+        "hit_rank": 1,
+        "answer": "根據年報資料，廣達「去年」（即 2025 年度）的營業收入為新台幣 2,123,689,447 千元 [1]。",
+        "answer_correct": true,
+        "refused_by_answer": false,
+        "latency": 8.8,
+        "error": null
+      },
+      {
+        "id": "n05",
+        "question": "鴻海去年營收有多少？",
+        "type": "numeric",
+        "answer_in": "both",
+        "seen": false,
+        "tickers_used": [
+          "2317"
+        ],
+        "top": [
+          {
+            "ticker": "2317",
+            "page": 5,
+            "kind": "text",
+            "distance": 0.2785
+          },
+          {
+            "ticker": "2317",
+            "page": 106,
+            "kind": "text",
+            "distance": 0.2933
+          },
+          {
+            "ticker": "2317",
+            "page": 145,
+            "kind": "table",
+            "distance": 0.2957
+          },
+          {
+            "ticker": "2317",
+            "page": 6,
+            "kind": "text",
+            "distance": 0.2973
+          },
+          {
+            "ticker": "2317",
+            "page": 6,
+            "kind": "text",
+            "distance": 0.3041
+          },
+          {
+            "ticker": "2317",
+            "page": 144,
+            "kind": "table",
+            "distance": 0.3061
+          },
+          {
+            "ticker": "2317",
+            "page": 113,
+            "kind": "text",
+            "distance": 0.3328
+          },
+          {
+            "ticker": "2317",
+            "page": 84,
+            "kind": "text",
+            "distance": 0.3476
+          }
+        ],
+        "best_distance": 0.2785,
+        "refused_by_threshold": false,
+        "hit_rank": 1,
+        "answer": "根據年報第 [1] 段「財務績效比較分析」表格顯示，鴻海 114 年度（即去年）營業收入為新台幣 8,103,104,763 仟元。",
+        "answer_correct": true,
+        "refused_by_answer": false,
+        "latency": 11.8,
+        "error": null
+      },
+      {
+        "id": "n06",
+        "question": "鴻海去年每股賺多少錢？",
+        "type": "numeric",
+        "answer_in": "text",
+        "seen": false,
+        "tickers_used": [
+          "2317"
+        ],
+        "top": [
+          {
+            "ticker": "2317",
+            "page": 6,
+            "kind": "text",
+            "distance": 0.3098
+          },
+          {
+            "ticker": "2317",
+            "page": 145,
+            "kind": "table",
+            "distance": 0.3144
+          },
+          {
+            "ticker": "2317",
+            "page": 6,
+            "kind": "text",
+            "distance": 0.3152
+          },
+          {
+            "ticker": "2317",
+            "page": 5,
+            "kind": "text",
+            "distance": 0.3214
+          },
+          {
+            "ticker": "2317",
+            "page": 106,
+            "kind": "text",
+            "distance": 0.3255
+          },
+          {
+            "ticker": "2317",
+            "page": 144,
+            "kind": "table",
+            "distance": 0.3383
+          },
+          {
+            "ticker": "2317",
+            "page": 84,
+            "kind": "text",
+            "distance": 0.3507
+          },
+          {
+            "ticker": "2317",
+            "page": 21,
+            "kind": "text",
+            "distance": 0.3522
+          }
+        ],
+        "best_distance": 0.3098,
+        "refused_by_threshold": false,
+        "hit_rank": 1,
+        "answer": "根據年報內文第 [4] 段記載，鴻海去年（113年度）每股盈餘為新台幣 11.01 元。",
+        "answer_correct": false,
+        "refused_by_answer": false,
+        "latency": 11.6,
+        "error": null
+      },
+      {
+        "id": "n07",
+        "question": "聯發科 2025 年的 EPS 是多少？",
+        "type": "numeric",
+        "answer_in": "text",
+        "seen": false,
+        "tickers_used": [
+          "2454"
+        ],
+        "top": [
+          {
+            "ticker": "2454",
+            "page": 105,
+            "kind": "table",
+            "distance": 0.3162
+          },
+          {
+            "ticker": "2454",
+            "page": 5,
+            "kind": "text",
+            "distance": 0.3289
+          },
+          {
+            "ticker": "2454",
+            "page": 69,
+            "kind": "text",
+            "distance": 0.3603
+          },
+          {
+            "ticker": "2454",
+            "page": 109,
+            "kind": "text",
+            "distance": 0.3604
+          },
+          {
+            "ticker": "2454",
+            "page": 106,
+            "kind": "text",
+            "distance": 0.3653
+          },
+          {
+            "ticker": "2454",
+            "page": 70,
+            "kind": "text",
+            "distance": 0.3662
+          },
+          {
+            "ticker": "2454",
+            "page": 106,
+            "kind": "text",
+            "distance": 0.3677
+          },
+          {
+            "ticker": "2454",
+            "page": 7,
+            "kind": "text",
+            "distance": 0.3699
+          }
+        ],
+        "best_distance": 0.3162,
+        "refused_by_threshold": false,
+        "hit_rank": 2,
+        "answer": "年報中查無相關資料。",
+        "answer_correct": false,
+        "refused_by_answer": true,
+        "latency": 8.6,
+        "error": null
+      },
+      {
+        "id": "n08",
+        "question": "聯發科去年投入多少研發經費？",
+        "type": "numeric",
+        "answer_in": "text",
+        "seen": false,
+        "tickers_used": [
+          "2454"
+        ],
+        "top": [
+          {
+            "ticker": "2454",
+            "page": 68,
+            "kind": "text",
+            "distance": 0.2851
+          },
+          {
+            "ticker": "2454",
+            "page": 109,
+            "kind": "text",
+            "distance": 0.2899
+          },
+          {
+            "ticker": "2454",
+            "page": 108,
+            "kind": "text",
+            "distance": 0.3169
+          },
+          {
+            "ticker": "2454",
+            "page": 5,
+            "kind": "text",
+            "distance": 0.3217
+          },
+          {
+            "ticker": "2454",
+            "page": 95,
+            "kind": "text",
+            "distance": 0.3282
+          },
+          {
+            "ticker": "2454",
+            "page": 78,
+            "kind": "text",
+            "distance": 0.3605
+          },
+          {
+            "ticker": "2454",
+            "page": 70,
+            "kind": "text",
+            "distance": 0.3641
+          },
+          {
+            "ticker": "2454",
+            "page": 105,
+            "kind": "table",
+            "distance": 0.3843
+          }
+        ],
+        "best_distance": 0.2851,
+        "refused_by_threshold": false,
+        "hit_rank": 1,
+        "answer": "根據年報段落 [3] 與 [5] 的資料，聯發科「去年」（民國一一四年）投入之研發費用為新台幣 148,306,389 仟元。\n\n[3] 聯發科 2025 p109（內文）｜企業永續發展\n研究發展計畫預計完成時程...民國一一四及一一三年度之研發費用分別為 148,306,389 仟元及 131,993,135 仟元...\n\n[5] 聯發科 2025 p5（內文）｜致股東報告書\n民國一一四年，聯發科技營收再創新高...展現聯發科技的市場地位及競爭力。",
+        "answer_correct": true,
+        "refused_by_answer": false,
+        "latency": 15.4,
+        "error": null
+      },
+      {
+        "id": "n09",
+        "question": "台達電去年營收多少？",
+        "type": "numeric",
+        "answer_in": "both",
+        "seen": false,
+        "tickers_used": [
+          "2308"
+        ],
+        "top": [
+          {
+            "ticker": "2308",
+            "page": 113,
+            "kind": "table",
+            "distance": 0.2582
+          },
+          {
+            "ticker": "2308",
+            "page": 6,
+            "kind": "text",
+            "distance": 0.2816
+          },
+          {
+            "ticker": "2308",
+            "page": 112,
+            "kind": "table",
+            "distance": 0.2926
+          },
+          {
+            "ticker": "2308",
+            "page": 89,
+            "kind": "text",
+            "distance": 0.3065
+          },
+          {
+            "ticker": "2308",
+            "page": 76,
+            "kind": "text",
+            "distance": 0.3169
+          },
+          {
+            "ticker": "2308",
+            "page": 76,
+            "kind": "text",
+            "distance": 0.3228
+          },
+          {
+            "ticker": "2308",
+            "page": 114,
+            "kind": "text",
+            "distance": 0.3254
+          },
+          {
+            "ticker": "2308",
+            "page": 81,
+            "kind": "text",
+            "distance": 0.3263
+          }
+        ],
+        "best_distance": 0.2582,
+        "refused_by_threshold": false,
+        "hit_rank": 1,
+        "answer": "根據年報段落 [3]「致股東報告書」所述，2025 年（即使用者所指的「去年」）台達合併營業額為新台幣 5,549 億元。\n\n[3]",
+        "answer_correct": true,
+        "refused_by_answer": false,
+        "latency": 11.2,
+        "error": null
+      },
+      {
+        "id": "n10",
+        "question": "台達電去年的研發開銷是多少？",
+        "type": "numeric",
+        "answer_in": "text",
+        "seen": false,
+        "tickers_used": [
+          "2308"
+        ],
+        "top": [
+          {
+            "ticker": "2308",
+            "page": 115,
+            "kind": "text",
+            "distance": 0.3249
+          },
+          {
+            "ticker": "2308",
+            "page": 114,
+            "kind": "text",
+            "distance": 0.3418
+          },
+          {
+            "ticker": "2308",
+            "page": 113,
+            "kind": "table",
+            "distance": 0.342
+          },
+          {
+            "ticker": "2308",
+            "page": 89,
+            "kind": "text",
+            "distance": 0.343
+          },
+          {
+            "ticker": "2308",
+            "page": 114,
+            "kind": "text",
+            "distance": 0.3534
+          },
+          {
+            "ticker": "2308",
+            "page": 20,
+            "kind": "text",
+            "distance": 0.3543
+          },
+          {
+            "ticker": "2308",
+            "page": 91,
+            "kind": "text",
+            "distance": 0.3596
+          },
+          {
+            "ticker": "2308",
+            "page": 90,
+            "kind": "text",
+            "distance": 0.3655
+          }
+        ],
+        "best_distance": 0.3249,
+        "refused_by_threshold": false,
+        "hit_rank": 1,
+        "answer": "根據年報段落 [7] 記載，民國 114 年（即去年）之研發費用為新台幣 48,742,709 仟元。[7]",
+        "answer_correct": true,
+        "refused_by_answer": false,
+        "latency": 9.3,
+        "error": null
+      },
+      {
+        "id": "n11",
+        "question": "台積電整個集團的資產總共有多少？",
+        "type": "numeric",
+        "answer_in": "table",
+        "seen": false,
+        "tickers_used": [
+          "2330"
+        ],
+        "top": [
+          {
+            "ticker": "2330",
+            "page": 64,
+            "kind": "table",
+            "distance": 0.2673
+          },
+          {
+            "ticker": "2330",
+            "page": 64,
+            "kind": "table",
+            "distance": 0.2767
+          },
+          {
+            "ticker": "2330",
+            "page": 37,
+            "kind": "text",
+            "distance": 0.3422
+          },
+          {
+            "ticker": "2330",
+            "page": 65,
+            "kind": "table",
+            "distance": 0.3458
+          },
+          {
+            "ticker": "2330",
+            "page": 65,
+            "kind": "table",
+            "distance": 0.3557
+          },
+          {
+            "ticker": "2330",
+            "page": 40,
+            "kind": "text",
+            "distance": 0.3644
+          },
+          {
+            "ticker": "2330",
+            "page": 91,
+            "kind": "text",
+            "distance": 0.3685
+          },
+          {
+            "ticker": "2330",
+            "page": 20,
+            "kind": "text",
+            "distance": 0.3706
+          }
+        ],
+        "best_distance": 0.2673,
+        "refused_by_threshold": false,
+        "hit_rank": 1,
+        "answer": "根據提供的年報段落，台積電整個集團（合併）的資產總額為新台幣 7,933,023,878 仟元 [1]。",
+        "answer_correct": true,
+        "refused_by_answer": false,
+        "latency": 13.9,
+        "error": null
+      },
+      {
+        "id": "t01",
+        "question": "聯發科的董事長是誰？",
+        "type": "text",
+        "answer_in": "text",
+        "seen": true,
+        "tickers_used": [
+          "2454"
+        ],
+        "top": [
+          {
+            "ticker": "2454",
+            "page": 15,
+            "kind": "text",
+            "distance": 0.3054
+          },
+          {
+            "ticker": "2454",
+            "page": 7,
+            "kind": "text",
+            "distance": 0.3077
+          },
+          {
+            "ticker": "2454",
+            "page": 7,
+            "kind": "text",
+            "distance": 0.3103
+          },
+          {
+            "ticker": "2454",
+            "page": 14,
+            "kind": "text",
+            "distance": 0.3215
+          },
+          {
+            "ticker": "2454",
+            "page": 64,
+            "kind": "text",
+            "distance": 0.3248
+          },
+          {
+            "ticker": "2454",
+            "page": 11,
+            "kind": "text",
+            "distance": 0.3254
+          },
+          {
+            "ticker": "2454",
+            "page": 7,
+            "kind": "text",
+            "distance": 0.3346
+          },
+          {
+            "ticker": "2454",
+            "page": 14,
+            "kind": "text",
+            "distance": 0.3347
+          }
+        ],
+        "best_distance": 0.3054,
+        "refused_by_threshold": false,
+        "hit_rank": 2,
+        "answer": "根據年報資料，聯發科技的董事長是蔡明介。\n\n[8]",
+        "answer_correct": true,
+        "refused_by_answer": false,
+        "latency": 7.2,
+        "error": null
+      },
+      {
+        "id": "t02",
+        "question": "鴻海主要賣哪些產品？",
+        "type": "text",
+        "answer_in": "text",
+        "seen": true,
+        "tickers_used": [
+          "2317"
+        ],
+        "top": [
+          {
+            "ticker": "2317",
+            "page": 109,
+            "kind": "text",
+            "distance": 0.284
+          },
+          {
+            "ticker": "2317",
+            "page": 121,
+            "kind": "text",
+            "distance": 0.3248
+          },
+          {
+            "ticker": "2317",
+            "page": 111,
+            "kind": "text",
+            "distance": 0.3251
+          },
+          {
+            "ticker": "2317",
+            "page": 109,
+            "kind": "text",
+            "distance": 0.3271
+          },
+          {
+            "ticker": "2317",
+            "page": 124,
+            "kind": "text",
+            "distance": 0.3417
+          },
+          {
+            "ticker": "2317",
+            "page": 111,
+            "kind": "text",
+            "distance": 0.3425
+          },
+          {
+            "ticker": "2317",
+            "page": 122,
+            "kind": "text",
+            "distance": 0.3465
+          },
+          {
+            "ticker": "2317",
+            "page": 106,
+            "kind": "text",
+            "distance": 0.3522
+          }
+        ],
+        "best_distance": 0.284,
+        "refused_by_threshold": false,
+        "hit_rank": 1,
+        "answer": "根據年報內容，鴻海目前所生產之主要產品共分四大類範圍如下：\n\n1.  **雲端網路產品領域**（主要為伺服器、網通等產品）\n    *   包含網路通訊、雲端空間所需的相關雲網裝置，例如路由器、伺服器、機櫃、邊緣運算、資料中心、衛星通訊等相關裝置。\n2.  **消費性電子產品領域**（主要為智慧手機、電視、遊戲機等產品）\n    *   包含消費電子產品、智慧型手機、穿戴式裝置、及家庭生活中的智慧娛樂系統及裝置，包含電視機、遊戲機、機上盒、音箱等。\n3.  **電腦終端產品領域**（主要為電腦、平板等產品）\n    *   包含電子運算裝置，包括桌上型電腦、筆記型電腦、平板電腦、事務機、印表機等。\n4.  **元件及其他產品領域**（主要為連線器、機構件、服務、車用、半導體等產品）\n    *   包含產業上游的關鍵零元件、技術零件，涵蓋聯結器、精密光學元件、及鏡頭、電子元件、半導體產品、汽車電子零件、刀具/模治具與機械裝置之製造與開發等，亦包括物流倉儲、軟體開發、醫療保健服務、工業網際網路整合方案領域。\n\n[1]",
+        "answer_correct": true,
+        "refused_by_answer": false,
+        "latency": 19.3,
+        "error": null
+      },
+      {
+        "id": "t03",
+        "question": "台達電打算什麼時候達到淨零排放？",
+        "type": "text",
+        "answer_in": "text",
+        "seen": true,
+        "tickers_used": [
+          "2308"
+        ],
+        "top": [
+          {
+            "ticker": "2308",
+            "page": 46,
+            "kind": "text",
+            "distance": 0.275
+          },
+          {
+            "ticker": "2308",
+            "page": 52,
+            "kind": "text",
+            "distance": 0.2799
+          },
+          {
+            "ticker": "2308",
+            "page": 53,
+            "kind": "text",
+            "distance": 0.2906
+          },
+          {
+            "ticker": "2308",
+            "page": 54,
+            "kind": "text",
+            "distance": 0.2914
+          },
+          {
+            "ticker": "2308",
+            "page": 45,
+            "kind": "text",
+            "distance": 0.306
+          },
+          {
+            "ticker": "2308",
+            "page": 45,
+            "kind": "text",
+            "distance": 0.3112
+          },
+          {
+            "ticker": "2308",
+            "page": 52,
+            "kind": "text",
+            "distance": 0.3242
+          },
+          {
+            "ticker": "2308",
+            "page": 59,
+            "kind": "text",
+            "distance": 0.3447
+          }
+        ],
+        "best_distance": 0.275,
+        "refused_by_threshold": false,
+        "hit_rank": 2,
+        "answer": "根據年報段落 [2] 與 [4]，台達電的淨零排放目標如下：\n\n*   **民國 139 年**達成淨零排放。\n    *   依據段落 [2]：「民國 139 年達成淨零排放。」\n    *   依據段落 [4]：「協助民國 139 年之前達到淨零排放的長期目標。」\n\n[2]",
+        "answer_correct": true,
+        "refused_by_answer": false,
+        "latency": 10.8,
+        "error": null
+      },
+      {
+        "id": "t04",
+        "question": "廣達的 AI 伺服器生意去年表現怎麼樣？",
+        "type": "text",
+        "answer_in": "text",
+        "seen": true,
+        "tickers_used": [
+          "2382"
+        ],
+        "top": [
+          {
+            "ticker": "2382",
+            "page": 5,
+            "kind": "text",
+            "distance": 0.2662
+          },
+          {
+            "ticker": "2382",
+            "page": 92,
+            "kind": "text",
+            "distance": 0.2665
+          },
+          {
+            "ticker": "2382",
+            "page": 86,
+            "kind": "text",
+            "distance": 0.2666
+          },
+          {
+            "ticker": "2382",
+            "page": 93,
+            "kind": "text",
+            "distance": 0.2775
+          },
+          {
+            "ticker": "2382",
+            "page": 88,
+            "kind": "text",
+            "distance": 0.2838
+          },
+          {
+            "ticker": "2382",
+            "page": 104,
+            "kind": "text",
+            "distance": 0.3091
+          },
+          {
+            "ticker": "2382",
+            "page": 84,
+            "kind": "text",
+            "distance": 0.3096
+          },
+          {
+            "ticker": "2382",
+            "page": 85,
+            "kind": "text",
+            "distance": 0.3099
+          }
+        ],
+        "best_distance": 0.2662,
+        "refused_by_threshold": false,
+        "hit_rank": 1,
+        "answer": "根據年報段落，2024 年（即「前一年度」）廣達 AI 伺服器營業額為**1.41兆元**。此數字較 2023 年成長了**50.5%**。",
+        "answer_correct": false,
+        "refused_by_answer": false,
+        "latency": 8.1,
+        "error": null
+      },
+      {
+        "id": "t05",
+        "question": "台積電的 2 奈米開始量產了嗎？",
+        "type": "text",
+        "answer_in": "text",
+        "seen": false,
+        "tickers_used": [
+          "2330"
+        ],
+        "top": [
+          {
+            "ticker": "2330",
+            "page": 6,
+            "kind": "text",
+            "distance": 0.3558
+          },
+          {
+            "ticker": "2330",
+            "page": 52,
+            "kind": "text",
+            "distance": 0.3851
+          },
+          {
+            "ticker": "2330",
+            "page": 10,
+            "kind": "text",
+            "distance": 0.391
+          },
+          {
+            "ticker": "2330",
+            "page": 6,
+            "kind": "text",
+            "distance": 0.3949
+          },
+          {
+            "ticker": "2330",
+            "page": 10,
+            "kind": "text",
+            "distance": 0.4059
+          },
+          {
+            "ticker": "2330",
+            "page": 6,
+            "kind": "text",
+            "distance": 0.4105
+          },
+          {
+            "ticker": "2330",
+            "page": 53,
+            "kind": "text",
+            "distance": 0.4163
+          },
+          {
+            "ticker": "2330",
+            "page": 52,
+            "kind": "text",
+            "distance": 0.431
+          }
+        ],
+        "best_distance": 0.3558,
+        "refused_by_threshold": true,
+        "hit_rank": 1,
+        "answer": "年報中查無相關資料",
+        "answer_correct": false,
+        "refused_by_answer": true,
+        "latency": 0.1,
+        "error": null
+      },
+      {
+        "id": "t06",
+        "question": "廣達的董事長是誰？",
+        "type": "text",
+        "answer_in": "text",
+        "seen": false,
+        "tickers_used": [
+          "2382"
+        ],
+        "top": [
+          {
+            "ticker": "2382",
+            "page": 65,
+            "kind": "text",
+            "distance": 0.306
+          },
+          {
+            "ticker": "2382",
+            "page": 7,
+            "kind": "text",
+            "distance": 0.3103
+          },
+          {
+            "ticker": "2382",
+            "page": 22,
+            "kind": "text",
+            "distance": 0.3149
+          },
+          {
+            "ticker": "2382",
+            "page": 7,
+            "kind": "text",
+            "distance": 0.3158
+          },
+          {
+            "ticker": "2382",
+            "page": 15,
+            "kind": "text",
+            "distance": 0.3211
+          },
+          {
+            "ticker": "2382",
+            "page": 17,
+            "kind": "text",
+            "distance": 0.3288
+          },
+          {
+            "ticker": "2382",
+            "page": 8,
+            "kind": "text",
+            "distance": 0.3329
+          },
+          {
+            "ticker": "2382",
+            "page": 13,
+            "kind": "text",
+            "distance": 0.3336
+          }
+        ],
+        "best_distance": 0.306,
+        "refused_by_threshold": false,
+        "hit_rank": 2,
+        "answer": "根據年報段落 [1] 記載，廣達的董事長是林百里。\n\n[1]",
+        "answer_correct": true,
+        "refused_by_answer": false,
+        "latency": 6.9,
+        "error": null
+      },
+      {
+        "id": "t07",
+        "question": "台達電現在是誰當董事長？",
+        "type": "text",
+        "answer_in": "text",
+        "seen": false,
+        "tickers_used": [
+          "2308"
+        ],
+        "top": [
+          {
+            "ticker": "2308",
+            "page": 74,
+            "kind": "text",
+            "distance": 0.2895
+          },
+          {
+            "ticker": "2308",
+            "page": 16,
+            "kind": "text",
+            "distance": 0.3031
+          },
+          {
+            "ticker": "2308",
+            "page": 9,
+            "kind": "text",
+            "distance": 0.305
+          },
+          {
+            "ticker": "2308",
+            "page": 16,
+            "kind": "text",
+            "distance": 0.3069
+          },
+          {
+            "ticker": "2308",
+            "page": 12,
+            "kind": "text",
+            "distance": 0.3083
+          },
+          {
+            "ticker": "2308",
+            "page": 15,
+            "kind": "text",
+            "distance": 0.3139
+          },
+          {
+            "ticker": "2308",
+            "page": 9,
+            "kind": "text",
+            "distance": 0.3145
+          },
+          {
+            "ticker": "2308",
+            "page": 10,
+            "kind": "text",
+            "distance": 0.319
+          }
+        ],
+        "best_distance": 0.2895,
+        "refused_by_threshold": false,
+        "hit_rank": 3,
+        "answer": "根據年報資料，台達電目前的董事長是**鄭平**。\n\n[7]",
+        "answer_correct": true,
+        "refused_by_answer": false,
+        "latency": 7.5,
+        "error": null
+      },
+      {
+        "id": "t08",
+        "question": "聯發科的手機晶片在市場上排第幾？",
+        "type": "text",
+        "answer_in": "text",
+        "seen": false,
+        "tickers_used": [
+          "2454"
+        ],
+        "top": [
+          {
+            "ticker": "2454",
+            "page": 5,
+            "kind": "text",
+            "distance": 0.3204
+          },
+          {
+            "ticker": "2454",
+            "page": 70,
+            "kind": "text",
+            "distance": 0.3226
+          },
+          {
+            "ticker": "2454",
+            "page": 68,
+            "kind": "text",
+            "distance": 0.3505
+          },
+          {
+            "ticker": "2454",
+            "page": 72,
+            "kind": "text",
+            "distance": 0.3581
+          },
+          {
+            "ticker": "2454",
+            "page": 66,
+            "kind": "text",
+            "distance": 0.3708
+          },
+          {
+            "ticker": "2454",
+            "page": 5,
+            "kind": "text",
+            "distance": 0.3936
+          },
+          {
+            "ticker": "2454",
+            "page": 109,
+            "kind": "text",
+            "distance": 0.3964
+          },
+          {
+            "ticker": "2454",
+            "page": 7,
+            "kind": "text",
+            "distance": 0.4023
+          }
+        ],
+        "best_distance": 0.3204,
+        "refused_by_threshold": false,
+        "hit_rank": 1,
+        "answer": "根據年報段落 [2] 的資料，聯發科在全球 IC 設計業者中於民國一一四年的排名為第 5 名。[3]",
+        "answer_correct": false,
+        "refused_by_answer": false,
+        "latency": 8.0,
+        "error": null
+      },
+      {
+        "id": "a01",
+        "question": "TSMC 去年的稅後淨利是多少？",
+        "type": "alias",
+        "answer_in": "both",
+        "seen": false,
+        "tickers_used": [
+          "2330"
+        ],
+        "top": [
+          {
+            "ticker": "2330",
+            "page": 91,
+            "kind": "text",
+            "distance": 0.3691
+          },
+          {
+            "ticker": "2330",
+            "page": 91,
+            "kind": "text",
+            "distance": 0.3861
+          },
+          {
+            "ticker": "2330",
+            "page": 91,
+            "kind": "text",
+            "distance": 0.3941
+          },
+          {
+            "ticker": "2330",
+            "page": 7,
+            "kind": "text",
+            "distance": 0.4079
+          },
+          {
+            "ticker": "2330",
+            "page": 89,
+            "kind": "text",
+            "distance": 0.4125
+          },
+          {
+            "ticker": "2330",
+            "page": 38,
+            "kind": "text",
+            "distance": 0.4167
+          },
+          {
+            "ticker": "2330",
+            "page": 91,
+            "kind": "text",
+            "distance": 0.4386
+          },
+          {
+            "ticker": "2330",
+            "page": 65,
+            "kind": "table",
+            "distance": 0.4595
+          }
+        ],
+        "best_distance": 0.3691,
+        "refused_by_threshold": true,
+        "hit_rank": 4,
+        "answer": "年報中查無相關資料",
+        "answer_correct": false,
+        "refused_by_answer": true,
+        "latency": 0.0,
+        "error": null
+      },
+      {
+        "id": "a02",
+        "question": "Foxconn 的董事長是誰？",
+        "type": "alias",
+        "answer_in": "text",
+        "seen": false,
+        "tickers_used": [
+          "2317"
+        ],
+        "top": [
+          {
+            "ticker": "2317",
+            "page": 18,
+            "kind": "text",
+            "distance": 0.4848
+          },
+          {
+            "ticker": "2317",
+            "page": 17,
+            "kind": "text",
+            "distance": 0.4856
+          },
+          {
+            "ticker": "2317",
+            "page": 17,
+            "kind": "text",
+            "distance": 0.4886
+          },
+          {
+            "ticker": "2317",
+            "page": 18,
+            "kind": "text",
+            "distance": 0.4944
+          },
+          {
+            "ticker": "2317",
+            "page": 8,
+            "kind": "text",
+            "distance": 0.5104
+          },
+          {
+            "ticker": "2317",
+            "page": 10,
+            "kind": "text",
+            "distance": 0.5274
+          },
+          {
+            "ticker": "2317",
+            "page": 82,
+            "kind": "text",
+            "distance": 0.5338
+          },
+          {
+            "ticker": "2317",
+            "page": 11,
+            "kind": "text",
+            "distance": 0.537
+          }
+        ],
+        "best_distance": 0.4848,
+        "refused_by_threshold": true,
+        "hit_rank": 5,
+        "answer": "年報中查無相關資料",
+        "answer_correct": false,
+        "refused_by_answer": true,
+        "latency": 0.0,
+        "error": null
+      },
+      {
+        "id": "r01",
+        "question": "大立光 2025 年的毛利率是多少？",
+        "type": "refusal",
+        "answer_in": null,
+        "seen": false,
+        "tickers_used": null,
+        "top": [
+          {
+            "ticker": "2382",
+            "page": 5,
+            "kind": "text",
+            "distance": 0.4608
+          },
+          {
+            "ticker": "2330",
+            "page": 42,
+            "kind": "text",
+            "distance": 0.4732
+          },
+          {
+            "ticker": "2330",
+            "page": 7,
+            "kind": "text",
+            "distance": 0.481
+          },
+          {
+            "ticker": "2330",
+            "page": 42,
+            "kind": "text",
+            "distance": 0.4941
+          },
+          {
+            "ticker": "2308",
+            "page": 6,
+            "kind": "text",
+            "distance": 0.4963
+          },
+          {
+            "ticker": "2382",
+            "page": 106,
+            "kind": "text",
+            "distance": 0.4971
+          },
+          {
+            "ticker": "2454",
+            "page": 109,
+            "kind": "text",
+            "distance": 0.4996
+          },
+          {
+            "ticker": "2454",
+            "page": 43,
+            "kind": "text",
+            "distance": 0.5015
+          }
+        ],
+        "best_distance": 0.4608,
+        "refused_by_threshold": true,
+        "hit_rank": null,
+        "answer": "年報中查無相關資料",
+        "answer_correct": true,
+        "refused_by_answer": true,
+        "latency": 0.0,
+        "error": null
+      },
+      {
+        "id": "r02",
+        "question": "國泰金控的董事長是誰？",
+        "type": "refusal",
+        "answer_in": null,
+        "seen": false,
+        "tickers_used": null,
+        "top": [
+          {
+            "ticker": "2317",
+            "page": 48,
+            "kind": "text",
+            "distance": 0.4374
+          },
+          {
+            "ticker": "2330",
+            "page": 18,
+            "kind": "text",
+            "distance": 0.4463
+          },
+          {
+            "ticker": "2317",
+            "page": 18,
+            "kind": "text",
+            "distance": 0.4471
+          },
+          {
+            "ticker": "2317",
+            "page": 10,
+            "kind": "text",
+            "distance": 0.4475
+          },
+          {
+            "ticker": "2317",
+            "page": 12,
+            "kind": "text",
+            "distance": 0.4475
+          },
+          {
+            "ticker": "2317",
+            "page": 17,
+            "kind": "text",
+            "distance": 0.4488
+          },
+          {
+            "ticker": "2330",
+            "page": 20,
+            "kind": "text",
+            "distance": 0.4557
+          },
+          {
+            "ticker": "2330",
+            "page": 48,
+            "kind": "text",
+            "distance": 0.4571
+          }
+        ],
+        "best_distance": 0.4374,
+        "refused_by_threshold": true,
+        "hit_rank": null,
+        "answer": "年報中查無相關資料",
+        "answer_correct": true,
+        "refused_by_answer": true,
+        "latency": 0.0,
+        "error": null
+      },
+      {
+        "id": "r03",
+        "question": "台北到高雄搭高鐵要多久？",
+        "type": "refusal",
+        "answer_in": null,
+        "seen": false,
+        "tickers_used": null,
+        "top": [
+          {
+            "ticker": "2330",
+            "page": 55,
+            "kind": "text",
+            "distance": 0.5078
+          },
+          {
+            "ticker": "2330",
+            "page": 42,
+            "kind": "text",
+            "distance": 0.5169
+          },
+          {
+            "ticker": "2330",
+            "page": 41,
+            "kind": "text",
+            "distance": 0.5229
+          },
+          {
+            "ticker": "2330",
+            "page": 40,
+            "kind": "text",
+            "distance": 0.5291
+          },
+          {
+            "ticker": "2308",
+            "page": 101,
+            "kind": "text",
+            "distance": 0.5292
+          },
+          {
+            "ticker": "2330",
+            "page": 39,
+            "kind": "text",
+            "distance": 0.5299
+          },
+          {
+            "ticker": "2317",
+            "page": 8,
+            "kind": "text",
+            "distance": 0.5346
+          },
+          {
+            "ticker": "2330",
+            "page": 60,
+            "kind": "text",
+            "distance": 0.5367
+          }
+        ],
+        "best_distance": 0.5078,
+        "refused_by_threshold": true,
+        "hit_rank": null,
+        "answer": "年報中查無相關資料",
+        "answer_correct": true,
+        "refused_by_answer": true,
+        "latency": 0.0,
+        "error": null
+      },
+      {
+        "id": "r04",
+        "question": "幫我寫一首關於秋天的詩。",
+        "type": "refusal",
+        "answer_in": null,
+        "seen": false,
+        "tickers_used": null,
+        "top": [
+          {
+            "ticker": "2317",
+            "page": 97,
+            "kind": "text",
+            "distance": 0.6764
+          },
+          {
+            "ticker": "2330",
+            "page": 40,
+            "kind": "text",
+            "distance": 0.6785
+          },
+          {
+            "ticker": "2317",
+            "page": 84,
+            "kind": "text",
+            "distance": 0.6788
+          },
+          {
+            "ticker": "2317",
+            "page": 99,
+            "kind": "text",
+            "distance": 0.6798
+          },
+          {
+            "ticker": "2317",
+            "page": 98,
+            "kind": "text",
+            "distance": 0.6813
+          },
+          {
+            "ticker": "2317",
+            "page": 91,
+            "kind": "text",
+            "distance": 0.6823
+          },
+          {
+            "ticker": "2330",
+            "page": 41,
+            "kind": "text",
+            "distance": 0.6833
+          },
+          {
+            "ticker": "2317",
+            "page": 90,
+            "kind": "text",
+            "distance": 0.6835
+          }
+        ],
+        "best_distance": 0.6764,
+        "refused_by_threshold": true,
+        "hit_rank": null,
+        "answer": "年報中查無相關資料",
+        "answer_correct": true,
+        "refused_by_answer": true,
+        "latency": 0.0,
+        "error": null
+      },
+      {
+        "id": "c01",
+        "question": "台積電和聯發科去年各花了多少錢在研發？",
+        "type": "cross",
+        "answer_in": "text",
+        "seen": false,
+        "tickers_used": [
+          "2330",
+          "2454"
+        ],
+        "top": [
+          {
+            "ticker": "2454",
+            "page": 109,
+            "kind": "text",
+            "distance": 0.3416
+          },
+          {
+            "ticker": "2454",
+            "page": 68,
+            "kind": "text",
+            "distance": 0.3424
+          },
+          {
+            "ticker": "2330",
+            "page": 52,
+            "kind": "text",
+            "distance": 0.3562
+          },
+          {
+            "ticker": "2454",
+            "page": 95,
+            "kind": "text",
+            "distance": 0.3751
+          },
+          {
+            "ticker": "2454",
+            "page": 108,
+            "kind": "text",
+            "distance": 0.3806
+          },
+          {
+            "ticker": "2454",
+            "page": 5,
+            "kind": "text",
+            "distance": 0.3864
+          },
+          {
+            "ticker": "2330",
+            "page": 55,
+            "kind": "text",
+            "distance": 0.3995
+          },
+          {
+            "ticker": "2454",
+            "page": 66,
+            "kind": "text",
+            "distance": 0.3997
+          }
+        ],
+        "best_distance": 0.3416,
+        "refused_by_threshold": true,
+        "hit_rank": 3,
+        "answer": "年報中查無相關資料",
+        "answer_correct": false,
+        "refused_by_answer": true,
+        "latency": 0.1,
+        "error": null
+      }
+    ],
+    "refusal_answer": {
+      "refusal_recall": 1.0,
+      "false_refusal": 0.22727272727272727,
+      "n_refusal": 4,
+      "n_answerable": 22
+    },
+    "answer": {
+      "by_type": {
+        "alias": {
+          "n": 2,
+          "correct": 0.0
+        },
+        "cross": {
+          "n": 1,
+          "correct": 0.0
+        },
+        "numeric": {
+          "n": 11,
+          "correct": 0.8181818181818182
+        },
+        "refusal": {
+          "n": 4,
+          "correct": 1.0
+        },
+        "text": {
+          "n": 8,
+          "correct": 0.625
+        }
+      },
+      "all": 0.6923076923076923,
+      "unseen": 0.631578947368421,
+      "avg_latency": 7.9
+    },
+    "run_at": "2026-10-22 20:24"
+  }
+}

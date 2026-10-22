@@ -13,7 +13,7 @@
 - [x] ingestion（表格）：`data/tables/*.jsonl` → kind='table' chunk，一張表一個 chunk，共 15 張（最大約 700 token）
 - [x] 後端 API：FastAPI，`/health`、`/companies`、`/ask`（SSE 串流）；`backend/app/`
 - [x] 前端：React 聊天頁 + 引用卡片（`frontend/`，Vite + TypeScript + Tailwind v4；Vitest 測 SSE 解析與引用拆解）
-- [ ] 評估：`eval/` 問題集 + hit@k
+- [ ] 評估：`eval/` 問題集（26 題）+ `run_eval.py`；baseline 已跑（hit@3 91%、回答正確率 69%），待做一項改進並比較
 - [ ] Docker 化（docker compose 一鍵啟動）、GitHub Actions、README（含 demo GIF）
 
 完成一項就把這裡打勾。
@@ -116,6 +116,7 @@ pip install -r requirements-ingest.txt
 python scripts/check_pdf_text.py data/pdfs/
 python scripts/extract_financial_tables.py data/pdfs/
 python scripts/ingest.py data/pdfs/          # 需要 pgvector 容器與 Ollama (bge-m3)
+python eval/run_eval.py --label baseline [--with-llm]   # 結果寫進 eval/results.md
 python -m pytest -q                          # 資料庫整合測試用 TEST_DATABASE_URL（twse_test），連不上會跳過
 ```
 
