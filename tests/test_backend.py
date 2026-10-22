@@ -116,6 +116,7 @@ def test_ask_streams_tokens_then_sources():
     sources = events[-1][1]
     # 表格排第一，編號跟 context 的 [1][2] 一致
     assert [(s["index"], s["kind"], s["page"]) for s in sources] == [(1, "table", 65), (2, "text", 7)]
+    assert sources[1]["content"] == "內文段落"  # 完整內容給前端展開卡片
     assert deps.llm.messages[1]["content"].index("[1] 台積電 2025 p65（表格）") < deps.llm.messages[1]["content"].index("[2]")
 
 

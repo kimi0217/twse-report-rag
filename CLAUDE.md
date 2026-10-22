@@ -12,7 +12,7 @@
 - [x] ingestion（內文）：`scripts/ingest.py`、`common/embeddings.py`；5 家約 1,780 個 text chunk（表格範圍內的內文已去重），bge-m3 (1024 維)、HNSW cosine
 - [x] ingestion（表格）：`data/tables/*.jsonl` → kind='table' chunk，一張表一個 chunk，共 15 張（最大約 700 token）
 - [x] 後端 API：FastAPI，`/health`、`/companies`、`/ask`（SSE 串流）；`backend/app/`
-- [ ] 前端：React 聊天頁 + 引用卡片
+- [x] 前端：React 聊天頁 + 引用卡片（`frontend/`，Vite + TypeScript + Tailwind v4；Vitest 測 SSE 解析與引用拆解）
 - [ ] 評估：`eval/` 問題集 + hit@k
 - [ ] Docker 化（docker compose 一鍵啟動）、GitHub Actions、README（含 demo GIF）
 
@@ -81,7 +81,7 @@ chunks(
 - `GET /companies` → `[{ticker, company, years: [..]}]`
 - `POST /ask` body `{question, tickers?: string[], year?: int}` → SSE 串流
   - `event: token` 逐段文字
-  - `event: sources` 最後送出 `[{index, ticker, company, year, page, kind, title, snippet}]`（index 對應回答裡的 [n]）
+  - `event: sources` 最後送出 `[{index, ticker, company, year, page, kind, title, snippet, content}]`（index 對應回答裡的 [n]；content 是完整 chunk，前端展開卡片用）
   - `event: error` 發生錯誤時
 
 ## 開發規則
@@ -126,4 +126,14 @@ pip install -r backend/requirements.txt
 uvicorn backend.app.main:app --port 8000
 ```
 
-（前端、docker-compose 完成後把指令補在這裡。）
+前端（在 `frontend/`；開發時 Vite 把 `/api/*` 轉給 `localhost:8000`，可用 `BACKEND_URL` 改）：
+
+```bash
+cd frontend
+npm install
+npm run dev        # http://localhost:5173
+npm test           # Vitest
+npm run build      # 型別檢查 + 打包
+```
+
+（docker-compose 完成後把指令補在這裡。）

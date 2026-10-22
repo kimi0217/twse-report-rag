@@ -48,7 +48,7 @@ def to_sources(chunks: list[RetrievedChunk], snippet_chars: int) -> list[Source]
     return [
         Source(
             index=i, ticker=c.ticker, company=c.company, year=c.year, page=c.page,
-            kind=c.kind, title=c.title, snippet=c.content[:snippet_chars],
+            kind=c.kind, title=c.title, snippet=c.content[:snippet_chars], content=c.content,
         )
         for i, c in enumerate(chunks, 1)
     ]

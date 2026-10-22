@@ -22,6 +22,8 @@ class Source(BaseModel):
     kind: Literal["text", "table"]
     title: str | None
     snippet: str
+    # 完整 chunk 內容，前端點卡片展開用；只在串流最後送一次，8 個 chunk 約數 KB
+    content: str
 
 
 class CompanyOut(BaseModel):
