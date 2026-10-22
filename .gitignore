@@ -1,0 +1,9 @@
+# 年報 PDF 檔案大，放在本機即可，README 說明下載來源
+data/pdfs/*.pdf
+reports/
+tests/fixtures/
+
+__pycache__/
+.pytest_cache/
+.venv/
+.env
