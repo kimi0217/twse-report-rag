@@ -23,21 +23,21 @@
 ## 架構
 
 ```mermaid
-flowchart LR
+flowchart TB
     subgraph offline["離線 ingestion（scripts/）"]
-        direction TB
+        direction LR
         A["年報 PDF<br/>證交所文件伺服器"] --> B["前置檢查<br/>空白頁・亂碼・罕見字比例"]
         B --> C["正規化<br/>NFKC・錯字表・字間空白"]
         C --> D["內文切 chunk<br/>300～500 字、不跨頁<br/>跨頁版先左後右"]
-        C --> E["財務表格抽取<br/>pdfplumber → PyMuPDF 重抽<br/>一張表一個 chunk"]
+        C --> E["財務表格抽取<br/>pdfplumber／PyMuPDF<br/>一張表一個 chunk"]
         D --> F["bge-m3 embedding<br/>前綴：公司 年度｜章節"]
         E --> F
     end
 
-    F --> DB[("PostgreSQL + pgvector<br/>HNSW・cosine")]
+    DB[("PostgreSQL + pgvector<br/>HNSW・cosine")]
 
     subgraph online["線上問答（backend/ + frontend/）"]
-        direction TB
+        direction LR
         Q["使用者提問<br/>React"] --> N["正規化・從問題認出公司<br/>含別名 TSMC、Foxconn…"]
         N --> R["向量檢索前 8 名<br/>SQL 篩選公司／年度"]
         R --> T{"最近距離<br/>超過門檻？"}
@@ -47,7 +47,9 @@ flowchart LR
         S --> U["回答＋引用卡片"]
     end
 
-    DB --> R
+    %% 用區塊對區塊連線：區塊內的節點若直接連到區塊外，mermaid 會忽略 direction LR
+    offline -- 寫入 --> DB
+    DB -- 檢索 --> online
 ```
 
 離線流程只跑一次，把資料寫進資料庫；線上服務只讀資料庫，網站沒有上傳功能。
