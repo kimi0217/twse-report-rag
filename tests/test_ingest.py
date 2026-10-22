@@ -1,3 +1,4 @@
+import json
 import os
 import sys
 from pathlib import Path
@@ -19,8 +20,10 @@ from ingest import (  # noqa: E402
     embedding_text,
     page_paragraphs,
     page_regions,
+    MAX_TABLE_CHARS,
     parse_filename,
     pdf_chunks,
+    table_chunks,
 )
 
 FONT = "china-t"
@@ -243,3 +246,52 @@ def test_ingest_rejects_unknown_ticker(db, tmp_path):
 def test_schema_dimension_mismatch_raises(db):
     with pytest.raises(RuntimeError):
         ingest.ensure_schema(db, FakeEmbedder.dim + 1)
+
+
+# --- 表格 chunk ---
+
+
+def _jsonl(path: Path, tables: list[dict]) -> Path:
+    path.write_text("".join(json.dumps(t, ensure_ascii=False) + "\n" for t in tables), encoding="utf-8")
+    return path
+
+
+TABLE = {
+    "file": "2330_2025.pdf", "page": 65, "table_index": 2, "tool": "pymupdf",
+    "title": "台積公司及子公司財務報表（單位:新台幣仟元）",
+    "markdown": "| 項目 | 民國114年 |\n|---|---|\n| 營業收入淨額 | 3,809,054,272 |",
+}
+
+
+def test_table_chunk_content_starts_with_title(tmp_path):
+    [c] = table_chunks(_jsonl(tmp_path / "2330_2025.jsonl", [TABLE]))
+    assert (c.page, c.title) == (65, TABLE["title"])
+    assert c.content == f"{TABLE['title']}\n\n{TABLE['markdown']}"
+    assert embedding_text("台積電", 2025, c).startswith(f"台積電 2025 年報｜{TABLE['title']}\n")
+
+
+def test_table_without_title_keeps_markdown_only(tmp_path):
+    [c] = table_chunks(_jsonl(tmp_path / "2330_2025.jsonl", [{**TABLE, "title": ""}]))
+    assert c.content == TABLE["markdown"]
+
+
+def test_oversized_table_raises_instead_of_splitting(tmp_path):
+    big = {**TABLE, "markdown": "| 項目 |\n" + "| 營業收入 |\n" * (MAX_TABLE_CHARS // 8)}
+    with pytest.raises(ValueError, match="超過"):
+        table_chunks(_jsonl(tmp_path / "2330_2025.jsonl", [big]))
+
+
+def test_text_and_table_reingest_do_not_touch_each_other(db, tmp_path):
+    pdf = _pdf(tmp_path / "2330_2025.pdf", [{"size": (595, 842), "texts": [(50, 50, 480, 600, SENTENCE * 30)]}])
+    jsonl = _jsonl(tmp_path / "2330_2025.jsonl", [TABLE, {**TABLE, "page": 64, "table_index": 1}])
+    companies = {"2330": "台積電"}
+
+    texts = ingest.ingest_pdf(db, pdf, FakeEmbedder(), companies)
+    ingest.ingest_tables(db, jsonl, FakeEmbedder(), companies)
+    ingest.ingest_tables(db, jsonl, FakeEmbedder(), companies)  # 重跑表格
+    assert (_count(db, "text"), _count(db, "table")) == (len(texts), 2)
+
+    ingest.ingest_pdf(db, pdf, FakeEmbedder(), companies)  # 重跑內文
+    assert (_count(db, "text"), _count(db, "table")) == (len(texts), 2)
+    row = db.execute("SELECT title, page FROM chunks WHERE kind = 'table' ORDER BY page DESC LIMIT 1").fetchone()
+    assert row == (TABLE["title"], 65)

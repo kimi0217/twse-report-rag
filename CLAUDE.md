@@ -10,7 +10,7 @@
 - [x] 年報資料：2308、2317、2330、2382、2454 的 2025 年報；財務表格抽取品質修正（PyMuPDF 重抽、內容篩選、表名、續表、錯字表）
 - [x] 2412 中華電淘汰（內文約 17% 字被字型換成罕見字），原檔留在 `data/rejected/`，改用 2382 廣達；`check_pdf_text.py` 新增罕見字比例指標
 - [x] ingestion（內文）：`scripts/ingest.py`、`scripts/embeddings.py`；5 家共 1,798 個 text chunk，bge-m3 (1024 維)、HNSW cosine
-- [ ] ingestion（表格）：`data/tables/*.jsonl` → kind='table' chunk
+- [x] ingestion（表格）：`data/tables/*.jsonl` → kind='table' chunk，一張表一個 chunk，共 15 張（最大約 700 token）
 - [ ] 後端 API：FastAPI，`/companies`、`/ask`（SSE 串流）
 - [ ] 前端：React 聊天頁 + 引用卡片
 - [ ] 評估：`eval/` 問題集 + hit@k

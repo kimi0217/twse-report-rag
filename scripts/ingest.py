@@ -1,10 +1,11 @@
-"""把年報 PDF 內文切 chunk、算 embedding，寫進 PostgreSQL (pgvector)。
+"""把年報 PDF 內文與財務表格切 chunk、算 embedding，寫進 PostgreSQL (pgvector)。
 
 用法：
-    python scripts/ingest.py data/pdfs/
-    python scripts/ingest.py data/pdfs/2330_2025.pdf
+    python scripts/ingest.py data/pdfs/                 # 內文 + 表格
+    python scripts/ingest.py data/pdfs/2330_2025.pdf --kind table
 
-這一步只處理內文（kind='text'）；表格 chunk 另外由 data/tables/*.jsonl 寫入。
+內文（kind='text'）直接讀 PDF；表格（kind='table'）讀 extract_financial_tables.py 產生的
+data/tables/<同檔名>.jsonl，所以表格要先抽好。
 
 做法：
 1. 檔名 <股票代號>_<年度>.pdf → ticker、year；公司名稱查 config/companies.json。
@@ -14,7 +15,10 @@
 4. 段落依序接成 300～500 字的 chunk，相鄰重疊約 50 字；不跨頁，頁碼才保證正確。
 5. 送去 embedding 的文字前面加「公司 年度 年報｜章節」，資料庫存原文：
    年報內文多寫「本公司」，不加公司名，問「台積電研發費用」時向量對不到正確公司。
-6. 每份 PDF 一個 transaction：先刪該公司該年度的 text chunk 再寫入，重跑不會重複，也不動表格 chunk。
+6. 每份 PDF、每種 kind 一個 transaction：先刪該公司該年度同 kind 的舊資料再寫入，
+   重跑不會重複，重跑內文也不會刪到表格（反之亦然）。
+7. 表格一張一個 chunk，不切：切開後數字會跟表頭、項目欄分家，看不出是哪一年、哪個項目。
+   content 是「表名 + markdown」，表名同時存 title。
 """
 
 from __future__ import annotations
@@ -40,6 +44,7 @@ from textnorm import load_char_fixes, normalize_text  # noqa: E402
 ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_COMPANIES = ROOT / "config" / "companies.json"
 DEFAULT_CACHE = ROOT / "data" / "embeddings_cache.jsonl"
+DEFAULT_TABLES = ROOT / "data" / "tables"
 DEFAULT_DB = "postgresql://twse:twse@localhost:5432/twse"
 
 MIN_CHUNK = 300
@@ -51,6 +56,9 @@ MIN_PAGE_CHARS = 100
 # 單獨成塊的章節標題、頁尾殘字；太短沒有檢索價值
 MIN_KEEP = 50
 SENTENCE_END = "。！？；!?;\n"
+# bge-m3 上限 8192 token；實測財務表格約 0.62 token/字，6000 字約 3700 token，留一倍餘裕。
+# Ollama 超過上限會靜默截斷，表格後半的數字就查不到，所以寧可停下來讓人處理
+MAX_TABLE_CHARS = 6000
 # 區塊以這些字結尾才算段落結束；否則是排版折行（台積電一行一個區塊），要跟下一個區塊接起來
 PARAGRAPH_END = "。！？；：!?;:」）)"
 TOC_HINT = re.compile(r"目\s*錄|\.{6,}|…{3,}")
@@ -232,6 +240,51 @@ def ensure_schema(conn: psycopg.Connection, dim: int) -> None:
     conn.commit()
 
 
+def table_chunks(path: Path) -> list[Chunk]:
+    """讀 extract_financial_tables.py 的 jsonl；表名與 markdown 在抽取時已經過 char_fixes 與正規化。"""
+    out = []
+    with open(path, encoding="utf-8") as fp:
+        for line in fp:
+            if not line.strip():
+                continue
+            t = json.loads(line)
+            title = t.get("title") or ""
+            content = f"{title}\n\n{t['markdown']}" if title else t["markdown"]
+            if len(content) > MAX_TABLE_CHARS:
+                raise ValueError(
+                    f"{path.name} 第 {t['page']} 頁表 {t['table_index']} 有 {len(content)} 字，"
+                    f"超過 {MAX_TABLE_CHARS}，可能超出 bge-m3 輸入上限，請人工處理"
+                )
+            out.append(Chunk(t["page"], title, content))
+    return out
+
+
+def _company(path: Path, companies: dict[str, str]) -> tuple[str, str, int]:
+    ticker, year = parse_filename(path)
+    if ticker not in companies:
+        raise KeyError(f"{ticker} 不在公司對照表，請加進 config/companies.json")
+    return ticker, companies[ticker], year
+
+
+def _replace_chunks(
+    conn: psycopg.Connection, ticker: str, company: str, year: int, kind: str,
+    chunks: list[Chunk], embedder: Embedder,
+) -> None:
+    # 先算完 embedding 再開 transaction：Ollama 失敗時資料庫裡的舊資料完全不受影響
+    vectors = embedder.embed([embedding_text(company, year, c) for c in chunks])
+    with conn.transaction():
+        conn.execute("DELETE FROM chunks WHERE ticker = %s AND year = %s AND kind = %s", (ticker, year, kind))
+        with conn.cursor() as cur:
+            cur.executemany(
+                "INSERT INTO chunks (ticker, company, year, page, kind, title, content, embedding)"
+                " VALUES (%s, %s, %s, %s, %s, %s, %s, %s)",
+                [
+                    (ticker, company, year, c.page, kind, c.title or None, c.content, v)
+                    for c, v in zip(chunks, vectors)
+                ],
+            )
+
+
 def ingest_pdf(
     conn: psycopg.Connection,
     path: Path,
@@ -239,25 +292,19 @@ def ingest_pdf(
     companies: dict[str, str],
     char_fixes_path: Path | None = None,
 ) -> list[Chunk]:
-    ticker, year = parse_filename(path)
-    if ticker not in companies:
-        raise KeyError(f"{ticker} 不在公司對照表，請加進 config/companies.json")
-    company = companies[ticker]
+    ticker, company, year = _company(path, companies)
     fixes = load_char_fixes(path.name, char_fixes_path) if char_fixes_path else load_char_fixes(path.name)
     chunks = pdf_chunks(path, fixes)
-    vectors = embedder.embed([embedding_text(company, year, c) for c in chunks])
+    _replace_chunks(conn, ticker, company, year, "text", chunks, embedder)
+    return chunks
 
-    with conn.transaction():
-        conn.execute("DELETE FROM chunks WHERE ticker = %s AND year = %s AND kind = 'text'", (ticker, year))
-        with conn.cursor() as cur:
-            cur.executemany(
-                "INSERT INTO chunks (ticker, company, year, page, kind, title, content, embedding)"
-                " VALUES (%s, %s, %s, %s, 'text', %s, %s, %s)",
-                [
-                    (ticker, company, year, c.page, c.title or None, c.content, v)
-                    for c, v in zip(chunks, vectors)
-                ],
-            )
+
+def ingest_tables(
+    conn: psycopg.Connection, path: Path, embedder: Embedder, companies: dict[str, str]
+) -> list[Chunk]:
+    ticker, company, year = _company(path, companies)
+    chunks = table_chunks(path)
+    _replace_chunks(conn, ticker, company, year, "table", chunks, embedder)
     return chunks
 
 
@@ -265,6 +312,8 @@ def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("paths", nargs="+", type=Path, help="PDF 檔或資料夾")
     ap.add_argument("--cache", type=Path, default=DEFAULT_CACHE)
+    ap.add_argument("--tables", type=Path, default=DEFAULT_TABLES, help="表格 jsonl 資料夾")
+    ap.add_argument("--kind", choices=["all", "text", "table"], default="all")
     args = ap.parse_args()
 
     files: list[Path] = []
@@ -277,13 +326,23 @@ def main() -> int:
     start = time.perf_counter()
     with connect() as conn:
         ensure_schema(conn, dim)
-        print(f"{'檔案':<16}{'chunk':>7}{'平均字數':>9}{'最短':>6}{'最長':>6}{'秒':>8}")
+        print(f"{'檔案':<16}{'kind':>6}{'chunk':>7}{'平均字數':>9}{'最短':>6}{'最長':>6}{'秒':>8}")
         for f in files:
-            t0 = time.perf_counter()
-            chunks = ingest_pdf(conn, f, embedder, companies)
-            lengths = [len(c.content) for c in chunks]
-            print(f"{f.name:<18}{len(chunks):>7}{statistics.mean(lengths):>10.0f}{min(lengths):>7}{max(lengths):>7}"
-                  f"{time.perf_counter() - t0:>9.1f}")
+            jobs = []
+            if args.kind in ("all", "text"):
+                jobs.append(("text", lambda f=f: ingest_pdf(conn, f, embedder, companies)))
+            if args.kind in ("all", "table"):
+                jsonl = args.tables / f"{f.stem}.jsonl"
+                if jsonl.exists():
+                    jobs.append(("table", lambda j=jsonl: ingest_tables(conn, j, embedder, companies)))
+                else:
+                    print(f"{f.name:<18} table  找不到 {jsonl}，先跑 extract_financial_tables.py")
+            for kind, job in jobs:
+                t0 = time.perf_counter()
+                chunks = job()
+                lengths = [len(c.content) for c in chunks] or [0]
+                print(f"{f.name:<18}{kind:>6}{len(chunks):>7}{statistics.mean(lengths):>10.0f}"
+                      f"{min(lengths):>7}{max(lengths):>7}{time.perf_counter() - t0:>9.1f}")
     print(f"\n總耗時 {time.perf_counter() - start:.1f} 秒；embedding 快取命中 {embedder.hits}、新算 {embedder.misses}")
     return 0
 
