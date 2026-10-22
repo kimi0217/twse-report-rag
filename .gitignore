@@ -13,3 +13,4 @@ __pycache__/
 data/tables/
 data/rejected/
 data/embeddings_cache.jsonl
+data/seed/*.dump

@@ -137,4 +137,11 @@ npm test           # Vitest
 npm run build      # 型別檢查 + 打包
 ```
 
-（docker-compose 完成後把指令補在這裡。）
+Docker（快速開始見 README）：
+
+```bash
+sh scripts/fetch_seed.sh            # 從 GitHub Release 下載資料庫 seed（data/seed/chunks.dump）
+docker compose up -d --build        # http://localhost:8080；db 對外 port 5433
+sh scripts/make_seed.sh             # 維護者：從本機 twse-pg 匯出新的 seed，上傳 Release 並 commit .sha256
+python scripts/download_reports.py  # 從證交所下載年報到 data/pdfs/
+```

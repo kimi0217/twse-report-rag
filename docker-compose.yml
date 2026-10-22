@@ -1,0 +1,58 @@
+# 本機一鍵啟動：db（pgvector）＋ backend（FastAPI）＋ frontend（nginx）。
+# Ollama 不在這裡：Mac 的 Docker 用不到 GPU，請直接裝在主機上，容器透過 host.docker.internal 連線。
+# 設定從專案根目錄的 .env 讀（cp .env.example .env）。
+
+services:
+  db:
+    image: pgvector/pgvector:pg16
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-twse}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-twse}
+      POSTGRES_DB: ${POSTGRES_DB:-twse}
+    volumes:
+      - db-data:/var/lib/postgresql/data
+      - ./docker/db/10-restore-seed.sh:/docker-entrypoint-initdb.d/10-restore-seed.sh:ro
+      - ./data/seed:/seed:ro
+    # 對外開 5433（不是 5432）：讓主機上的 ingestion 腳本寫入，也避免跟本機原有的 Postgres 衝突
+    ports:
+      - "${DB_PORT:-5433}:5432"
+    healthcheck:
+      # 用 TCP（-h 127.0.0.1）檢查：第一次啟動還原 seed 時，初始化用的暫時伺服器只開 Unix socket，
+      # 用 socket 檢查會在還原途中就回報健康，backend 太早啟動、使用者一問就失敗
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 3s
+      retries: 60
+      start_period: 30s
+
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      # 容器裡的位址跟主機上不同，這兩個一律在這裡覆寫，同一份 .env 在 venv 與 Docker 都能用
+      DATABASE_URL: postgresql://${POSTGRES_USER:-twse}:${POSTGRES_PASSWORD:-twse}@db:5432/${POSTGRES_DB:-twse}
+      OLLAMA_BASE_URL: ${DOCKER_OLLAMA_BASE_URL:-http://host.docker.internal:11434}
+    extra_hosts:
+      # Linux 的 Docker 沒有預設的 host.docker.internal
+      - "host.docker.internal:host-gateway"
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      - "${BACKEND_PORT:-8000}:8000"
+
+  frontend:
+    build:
+      context: frontend
+    depends_on:
+      backend:
+        condition: service_healthy
+    ports:
+      - "${FRONTEND_PORT:-8080}:80"
+
+volumes:
+  db-data:

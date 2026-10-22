@@ -1,0 +1,7 @@
+# backend 的 build context 是專案根目錄（需要 common/、config/），只送必要的檔案進 Docker
+*
+!backend/
+!common/
+!config/
+backend/**/__pycache__
+common/**/__pycache__

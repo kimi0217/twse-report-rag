@@ -54,7 +54,12 @@ async def _configure(conn: AsyncConnection) -> None:
 
 class PgRetriever:
     def __init__(self, database_url: str) -> None:
-        self.pool = AsyncConnectionPool(database_url, configure=_configure, open=False, min_size=1, max_size=5)
+        # check：借出連線前先確認還活著。資料庫重啟（例如 docker compose 重建 db）後，
+        # 池裡的舊連線都已斷線，不檢查的話第一批請求會直接 500
+        self.pool = AsyncConnectionPool(
+            database_url, configure=_configure, open=False, min_size=1, max_size=5,
+            check=AsyncConnectionPool.check_connection,
+        )
 
     async def open(self) -> None:
         await self.pool.open()
