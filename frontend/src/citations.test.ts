@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { splitCitations } from './citations'
+import { citedIndices, partitionSources, splitCitations } from './citations'
 
 describe('splitCitations', () => {
   it('把 [n] 拆成引用片段', () => {
@@ -27,5 +27,35 @@ describe('splitCitations', () => {
 
   it('非數字的方括號不受影響', () => {
     expect(splitCitations('**19.45 元** [註2]', 8)).toEqual([{ type: 'text', text: '**19.45 元** [註2]' }])
+  })
+})
+
+describe('citedIndices', () => {
+  it('去重並排序，超出範圍的不算', () => {
+    expect(citedIndices('見 [3][1]，又見 [1] 與 [9]', 8)).toEqual([1, 3])
+  })
+})
+
+describe('partitionSources', () => {
+  const sources = [1, 2, 3, 4, 5].map((index) => ({ index }))
+
+  it('只顯示被引用的卡片，其餘收進 others', () => {
+    const { primary, others } = partitionSources('營收 [2]，毛利 [4]', sources)
+    expect(primary.map((s) => s.index)).toEqual([2, 4])
+    expect(others.map((s) => s.index)).toEqual([1, 3, 5])
+  })
+
+  it('回答沒有任何 [n] 時顯示前 3 張', () => {
+    const { primary, others } = partitionSources('沒有標註引用的回答', sources)
+    expect(primary.map((s) => s.index)).toEqual([1, 2, 3])
+    expect(others.map((s) => s.index)).toEqual([4, 5])
+  })
+
+  it('只引用不存在的編號時，視同沒有引用', () => {
+    expect(partitionSources('見 [9]', sources).primary.map((s) => s.index)).toEqual([1, 2, 3])
+  })
+
+  it('沒有來源時兩組都是空的', () => {
+    expect(partitionSources('年報中查無相關資料', [])).toEqual({ primary: [], others: [] })
   })
 })

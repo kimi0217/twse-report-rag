@@ -149,7 +149,7 @@ docker compose up -d --build
 ## 測試
 
 - **pytest 110 個**：PDF 前置檢查、表格抽取、chunking、ingestion、後端 API、評估判分等；其中 6 個是資料庫整合測試，會連真的 pgvector。embedding 與 LLM 一律用 fake，不需要 Ollama。
-- **Vitest 12 個**：前端的 SSE 解析（事件或中文字被切在兩個 chunk 之間）與引用編號拆解。
+- **Vitest 17 個**：前端的 SSE 解析（事件或中文字被切在兩個 chunk 之間）、引用編號拆解，以及引用卡片的顯示規則。
 - **CI 自動執行**：每次 push 與 pull request 時，[GitHub Actions](.github/workflows/ci.yml) 會在 pgvector 服務上跑 pytest（資料庫測試連不上就失敗，不會被跳過），並執行前端的 eslint、Vitest、build，以及兩個 Docker image 的建置。
 - **測試環境**：在 macOS 上開發與測試，CI 在 Linux（Ubuntu）上執行；Windows 未測試。
 

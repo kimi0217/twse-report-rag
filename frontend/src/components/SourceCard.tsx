@@ -41,7 +41,10 @@ export function SourceCard({ source: s, id, highlighted }: Props) {
             )}
           </span>
           {s.title && <span className="mt-0.5 block truncate text-xs text-slate-500">{s.title}</span>}
-          {!open && <span className="mt-1.5 line-clamp-2 block text-xs leading-relaxed text-slate-600">{s.snippet}</span>}
+          {/* 表格的摘要是 markdown 原始碼，收合時不顯示；副標題已經有表名，展開才顯示整張表 */}
+          {!open && !isTable && (
+            <span className="mt-1.5 line-clamp-2 block text-xs leading-relaxed text-slate-600">{s.snippet}</span>
+          )}
         </span>
         <span className={`mt-1 text-slate-400 transition-transform ${open ? 'rotate-180' : ''}`} aria-hidden>
           ▾

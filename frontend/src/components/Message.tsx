@@ -1,5 +1,5 @@
-import { Fragment } from 'react'
-import { splitCitations } from '../citations'
+import { Fragment, useState } from 'react'
+import { partitionSources, splitCitations } from '../citations'
 import { cardId, type ChatMessage } from '../chat'
 import { SourceCard } from './SourceCard'
 
@@ -19,6 +19,9 @@ function Inline({ text }: { text: string }) {
 export function Message({ message: m, highlighted, onCite }: Props) {
   const segments = splitCitations(m.answer, m.sources.length)
   const streaming = m.status === 'streaming'
+  const [showOthers, setShowOthers] = useState(false)
+  // 預設只顯示回答真的引用到的卡片；其他檢索到的段落多半是雜訊，收起來避免干擾
+  const { primary, others } = partitionSources(m.answer, m.sources)
 
   return (
     <article className="space-y-3">
@@ -65,14 +68,33 @@ export function Message({ message: m, highlighted, onCite }: Props) {
         )}
       </div>
 
-      {m.sources.length > 0 && (
+      {primary.length > 0 && (
         <section>
-          <h3 className="mb-2 text-xs font-semibold tracking-wider text-slate-500">引用來源（{m.sources.length}）</h3>
+          <h3 className="mb-2 text-xs font-semibold tracking-wider text-slate-500">引用來源（{primary.length}）</h3>
           <ol className="grid gap-2">
-            {m.sources.map((s) => (
+            {primary.map((s) => (
               <SourceCard key={s.index} source={s} id={cardId(m.id, s.index)} highlighted={highlighted === s.index} />
             ))}
           </ol>
+          {others.length > 0 && (
+            <div className="mt-2">
+              <button
+                type="button"
+                onClick={() => setShowOthers((v) => !v)}
+                aria-expanded={showOthers}
+                className="text-xs text-slate-500 hover:text-blue-600"
+              >
+                {showOthers ? '▾' : '▸'} 其他參考段落（{others.length}）
+              </button>
+              {showOthers && (
+                <ol className="mt-2 grid gap-2">
+                  {others.map((s) => (
+                    <SourceCard key={s.index} source={s} id={cardId(m.id, s.index)} highlighted={highlighted === s.index} />
+                  ))}
+                </ol>
+              )}
+            </div>
+          )}
         </section>
       )}
     </article>
