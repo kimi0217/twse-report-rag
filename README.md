@@ -8,7 +8,7 @@
 > It runs entirely on your machine — Ollama (bge-m3 + qwen3.5:2b), PostgreSQL/pgvector and hand-written retrieval, no LangChain and no API keys — and starts with `docker compose up`.
 > On a hand-built evaluation set, retrieval finds the right page every time (hit@8 100%) and answer accuracy rose from 69% to 81%; the remaining errors come from the small model's reading comprehension.
 
-<!-- demo GIF 錄好後打開：![demo](docs/demo.gif) -->
+![demo](docs/demo.gif)
 
 收錄 5 家公司的 2025 年度（民國 114 年度）股東會年報：台達電 2308、鴻海 2317、台積電 2330、廣達 2382、聯發科 2454，共 1,794 個 chunk（內文 1,779、財務表格 15）。
 
