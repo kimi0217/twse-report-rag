@@ -122,10 +122,6 @@ docker compose up -d --build
 
 **檢索已經達標**，22 題可回答題的正確答案頁全部都在前 8 名（hit@8 22/22），held-out 的 3 題也一樣（3/3）。**瓶頸在 2B 模型的閱讀理解**，主評估集和 held-out 的錯誤，大多是正確段落已經在 context 裡，模型卻讀錯欄位（「去年」讀成前一年度）、挑錯人名，或該回答時拒答。下一步最有效的是換更大的 LLM，或由程式先把「去年」換成明確年度，而不是繼續調整檢索。
 
-## 測試
-
-後端 110 個 pytest（含真實資料庫的整合測試）、前端 17 個 Vitest。每次 push 到 GitHub 後，GitHub Actions 會自動執行這些測試。
-
 ## 遇到的問題與解法
 
 詳細過程見 [`docs/pdf-preflight.md`](docs/pdf-preflight.md)、[`docs/known-issues.md`](docs/known-issues.md)。
