@@ -135,16 +135,9 @@ docker compose up -d --build
 3. **金額單位差 1,000 倍**：模型漏寫「仟」字。在表格開頭標明單位，並在 prompt 加上範例。
 4. **拒答門檻誤拒可以回答的問題**：問題提到已知公司時放寬門檻，誤拒率從 23% 降到 5%。
 
-## 技術選型與理由
+## 技術
 
-| 項目 | 選擇 | 理由 |
-|---|---|---|
-| 執行環境 | 完全本機 | 不需要 API key、沒有費用，別人 clone 下來就能重現；代價是只能用小模型，評估結果也證實瓶頸在這裡。 |
-| Embedding | Ollama `bge-m3`（1024 維） | 多語言模型，中文表現好；1024 維低於 pgvector HNSW 索引的 2,000 維上限。 |
-| LLM | Ollama `qwen3.5:2b`，關閉思考模式 | 筆電跑得動的最小可用模型。思考模式實測一題約 150 秒、關掉約 7 秒，串流問答一定要關。 |
-| 向量資料庫 | PostgreSQL + pgvector | 向量和 metadata 在同一張表，公司、年度篩選直接寫在 SQL；HNSW 的 `iterative_scan` 讓只篩一家公司時也能取滿 8 筆。 |
-| RAG 框架 | 不用 LangChain / LlamaIndex | chunking、檢索、prompt 組裝都自己寫：每個決策都能解釋、都能用評估量化，相依套件也少。 |
-| 前端 | React + Vite + TypeScript + Tailwind | SSE 解析、引用連結自己寫，不用額外的 UI 或 markdown 套件。 |
+React、FastAPI、PostgreSQL + pgvector、Ollama（bge-m3、qwen3.5:2b）、Docker Compose、GitHub Actions
 
 ## 已知限制
 
