@@ -135,10 +135,6 @@ docker compose up -d --build
 3. **金額單位差 1,000 倍**：模型漏寫「仟」字。在表格開頭標明單位，並在 prompt 加上範例。
 4. **拒答門檻誤拒可以回答的問題**：問題提到已知公司時放寬門檻，誤拒率從 23% 降到 5%。
 
-## 技術
-
-React、FastAPI、PostgreSQL + pgvector、Ollama（bge-m3、qwen3.5:2b）、Docker Compose、GitHub Actions
-
 ## 已知限制
 
 詳見 [`docs/known-issues.md`](docs/known-issues.md)，重點如下：
