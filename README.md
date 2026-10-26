@@ -66,6 +66,7 @@ flowchart TB
 
 ### 步驟
 
+```bash
 # 1. 下載模型（embedding 約 1.2 GB、LLM 約 3 GB）
 ollama pull bge-m3
 ollama pull qwen3.5:2b
@@ -84,7 +85,7 @@ docker compose up -d --build
 
 - **第一次建置**：會下載 Python、Node、nginx 的 base image（約 300 MB），之後重建只要幾十秒。
 - **第一次啟動**：db 會自動還原 seed，約需 1～2 分鐘，完成前 backend 不會啟動。可以用 `docker compose ps` 確認三個服務都是 running（db、backend 會顯示 healthy）。
-- **第一次提問**：Ollama 要先載入模型，約 15 秒；之後每題約 5 秒。
+- **第一次提問**：Ollama 要先載入模型，約 15 秒；之後每題約 5～15 秒。
 - **後端 API**：<http://localhost:8000>（例如 `curl localhost:8000/companies`）。
 
 ## 評估結果
